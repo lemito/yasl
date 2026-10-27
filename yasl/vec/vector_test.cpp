@@ -224,3 +224,111 @@ YASL_TEST(vector_in_arena) {
     CHECK_EQ(vv[9].size(), size_t(9));
     CHECK_EQ(vv[9].resource(), static_cast<mem::Resource*>(&arena));
 }
+
+YASL_TEST(vector_retain_dedup_sort) {
+    Vector<int> v{5, 3, 3, 8, 1, 1, 1, 9, 3};
+    v.dedup();
+    CHECK((std::vector<int>(v.begin(), v.end()) == std::vector<int>{5, 3, 8, 1, 9, 3}));
+    v.sort();
+    CHECK((std::vector<int>(v.begin(), v.end()) == std::vector<int>{1, 3, 3, 5, 8, 9}));
+    v.dedup();
+    CHECK_EQ(v.size(), size_t(5));
+    v.retain([](int x) { return x != 5; });
+    CHECK((std::vector<int>(v.begin(), v.end()) == std::vector<int>{1, 3, 8, 9}));
+    CHECK_EQ(v.remove_if([](int x) { return x > 5; }), size_t(2));
+    v.sort([](int a, int b) { return a > b; });
+    CHECK_EQ(v[0], 3);
+
+    Vector<String> words{"pear", "fig", "banana", "kiwi", "apple"};
+    words.sort_by_key([](const String& s) { return s.size(); });
+    CHECK_EQ(words[0], "fig");
+    CHECK_EQ(words.back(), "banana");
+    Vector<std::pair<int, int>> pairs{{2, 0}, {1, 1}, {2, 2}, {1, 3}};
+    pairs.stable_sort([](const auto& a, const auto& b) { return a.first < b.first; });
+    CHECK_EQ(pairs[0].second, 1);
+    CHECK_EQ(pairs[1].second, 3);
+    CHECK_EQ(pairs[2].second, 0);
+    Vector<int> dup{1, 11, 2, 22, 3};
+    dup.dedup_by_key([](int x) { return x % 10; });
+    CHECK_EQ(dup.size(), size_t(3));
+}
+
+YASL_TEST(vector_search_first_last) {
+    Vector<int> v{4, 5, 6};
+    CHECK(v.contains(5));
+    CHECK(!v.contains(7));
+    CHECK_EQ(*v.index_of(6), size_t(2));
+    CHECK(!v.index_of(1).has_value());
+    CHECK_EQ(*v.first(), 4);
+    CHECK_EQ(*v.last(), 6);
+    *v.first() = 40;
+    CHECK_EQ(v[0], 40);
+    Vector<int> empty;
+    CHECK(!empty.first().has_value());
+    CHECK(!empty.last().has_value());
+    const Vector<int>& cv = v;
+    CHECK_EQ(*cv.last(), 6);
+}
+
+YASL_TEST(vector_extend_drain_split_off) {
+    mem::Tracking t;
+    {
+        Vector<String> a(&t);
+        for (const char* s : {"alpha", "bravo", "charlie", "delta", "echo", "foxtrot"}) {
+            a.push_back(String(s, &t));
+        }
+        Vector<String> removed = a.drain(1, 3);
+        CHECK_EQ(removed.size(), size_t(2));
+        CHECK_EQ(removed[0], "bravo");
+        CHECK_EQ(a.size(), size_t(4));
+        CHECK_EQ(a[1], "delta");
+        Vector<String> tail = a.split_off(2);
+        CHECK_EQ(a.size(), size_t(2));
+        CHECK_EQ(tail.size(), size_t(2));
+        CHECK_EQ(tail[1], "foxtrot");
+        a.extend(yasl::move(tail));
+        CHECK(tail.empty());
+        CHECK_EQ(a.size(), size_t(4));
+        a.extend(removed);
+        CHECK_EQ(a.size(), size_t(6));
+        CHECK_EQ(removed.size(), size_t(2));
+        Vector<int> ints;
+        std::vector<int> src{1, 2, 3};
+        ints.extend(src);
+        int raw[] = {4, 5};
+        ints.extend(raw);
+        CHECK_EQ(ints.size(), size_t(5));
+    }
+    CHECK_EQ(t.stats().live(), size_t(0));
+}
+
+YASL_TEST(vector_chunks_windows) {
+    Vector<int> v{1, 2, 3, 4, 5, 6, 7};
+    std::vector<int> sums;
+    for (Span<int> c : v.chunks(3)) {
+        int s = 0;
+        for (int x : c) {
+            s += x;
+        }
+        sums.push_back(s);
+    }
+    CHECK((sums == std::vector<int>{6, 15, 7}));
+    sums.clear();
+    for (Span<const int> w : static_cast<const Vector<int>&>(v).windows(3)) {
+        sums.push_back(w[0] + w[1] + w[2]);
+    }
+    CHECK_EQ(sums.size(), size_t(5));
+    CHECK_EQ(sums.front(), 6);
+    CHECK_EQ(sums.back(), 18);
+    size_t n = 0;
+    for ([[maybe_unused]] auto w : v.windows(8)) {
+        ++n;
+    }
+    CHECK_EQ(n, size_t(0));
+    for (Span<int> c : v.chunks(2)) {
+        c[0] = 0;
+    }
+    CHECK_EQ(v[0], 0);
+    CHECK_EQ(v[6], 0);
+    CHECK_EQ(v[1], 2);
+}

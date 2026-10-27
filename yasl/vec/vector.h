@@ -4,6 +4,7 @@
 #include <yasl/sys/algo.h>
 #include <yasl/sys/check.h>
 #include <yasl/sys/exception.h>
+#include <yasl/sys/optional.h>
 #include <yasl/sys/span.h>
 #include <yasl/sys/utility.h>
 
@@ -401,6 +402,153 @@ namespace yasl {
             size_t n = size_t(end() - out);
             erase(out, end());
             return n;
+        }
+
+        // Keeps only the elements for which pred(element) holds (Rust retain).
+        template <class Pred>
+        void retain(Pred pred) {
+            erase_if([&](T& v) { return !pred(v); });
+        }
+
+        // Alias of erase_if.
+        template <class Pred>
+        size_t remove_if(Pred pred) {
+            return erase_if(pred);
+        }
+
+        // Drops consecutive elements that are == to the one before them.
+        void dedup()
+            requires EqualityComparable<T>
+        {
+            dedup_by([](const T& a, const T& b) { return a == b; });
+        }
+
+        // Drops an element when same(previous kept, element) holds.
+        template <class Same>
+        void dedup_by(Same same) {
+            if (size_ < 2) {
+                return;
+            }
+            T* out = data_;
+            for (T* in = data_ + 1; in != end(); ++in) {
+                if (!same(static_cast<const T&>(*out), static_cast<const T&>(*in))) {
+                    ++out;
+                    if (out != in) {
+                        *out = yasl::move(*in);
+                    }
+                }
+            }
+            erase(out + 1, end());
+        }
+
+        template <class Key>
+        void dedup_by_key(Key key) {
+            dedup_by([&](const T& a, const T& b) { return key(a) == key(b); });
+        }
+
+        // Unstable sort by "<" (or by cmp).
+        template <class Cmp = Less>
+        void sort(Cmp cmp = Cmp()) {
+            yasl::sort(begin(), end(), cmp);
+        }
+
+        // Stable merge sort; the temporary buffer comes from this vector's resource.
+        template <class Cmp = Less>
+        void stable_sort(Cmp cmp = Cmp()) {
+            yasl::stable_sort(begin(), end(), cmp, res_);
+        }
+
+        template <class Key>
+        void sort_by_key(Key key) {
+            yasl::sort_by_key(begin(), end(), key);
+        }
+
+        template <class U>
+        bool contains(const U& value) const {
+            return index_of(value).has_value();
+        }
+
+        template <class U>
+        Optional<size_t> index_of(const U& value) const {
+            for (size_t i = 0; i < size_; ++i) {
+                if (data_[i] == value) {
+                    return i;
+                }
+            }
+            return none;
+        }
+
+        // Reference to the first / last element, none if empty.
+        Optional<T&> first() noexcept {
+            return size_ ? Optional<T&>(data_[0]) : Optional<T&>();
+        }
+
+        Optional<const T&> first() const noexcept {
+            return size_ ? Optional<const T&>(data_[0]) : Optional<const T&>();
+        }
+
+        Optional<T&> last() noexcept {
+            return size_ ? Optional<T&>(data_[size_ - 1]) : Optional<T&>();
+        }
+
+        Optional<const T&> last() const noexcept {
+            return size_ ? Optional<const T&>(data_[size_ - 1]) : Optional<const T&>();
+        }
+
+        // Appends copies of everything in a container or array.
+        template <class R>
+            requires requires(const R& r) { r.begin(); r.end(); }
+        void extend(const R& range) {
+            append(range.begin(), range.end());
+        }
+
+        template <size_t N>
+        void extend(const T (&array)[N]) {
+            append(array, array + N);
+        }
+
+        // Moves all elements of `other` to the end, leaving it empty.
+        void extend(Vector&& other) {
+            YASL_ASSERT(this != &other);
+            reserve(size_ + other.size_);
+            for (T& v : other) {
+                emplace_back(yasl::move(v));
+            }
+            other.clear();
+        }
+
+        // Removes [first, last) and returns it as a new vector (same resource).
+        Vector drain(size_t first, size_t last) {
+            YASL_ASSERT(first <= last && last <= size_);
+            Vector out(res_);
+            out.reserve(last - first);
+            for (size_t i = first; i < last; ++i) {
+                out.emplace_back(yasl::move(data_[i]));
+            }
+            erase(data_ + first, data_ + last);
+            return out;
+        }
+
+        // Cuts the vector at `at`: this keeps [0, at), the result gets the rest.
+        Vector split_off(size_t at) {
+            return drain(at, size_);
+        }
+
+        // for (Span<T> piece : v.chunks(3)) / v.windows(2); see Span.
+        Chunks<T> chunks(size_t n) noexcept {
+            return span().chunks(n);
+        }
+
+        Chunks<const T> chunks(size_t n) const noexcept {
+            return span().chunks(n);
+        }
+
+        Windows<T> windows(size_t n) noexcept {
+            return span().windows(n);
+        }
+
+        Windows<const T> windows(size_t n) const noexcept {
+            return span().windows(n);
         }
 
         template <class It, class S>
