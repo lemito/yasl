@@ -156,7 +156,7 @@
   - Готово, когда: рандомизированные тесты против `std::unordered_map`, тест на удаление/повторную вставку (tombstones), Tracking.
 - [x] **4.3 `Deque<T>`** (Rust `VecDeque`, Java `ArrayDeque`): кольцевой буфер, `push/pop_front/back`, `operator[]`,
   итераторы произвольного доступа. Файл `yasl/vec/deque.h`. P1.
-- [ ] **4.4 `SmallVector<T, N>`** — inline-буфер на N элементов, далее heap. Отдельный тип (не `Vector` + `InlineArena`:
+- [x] **4.4 `SmallVector<T, N>`** — inline-буфер на N элементов, далее heap. Отдельный тип (не `Vector` + `InlineArena`:
   арена не освобождает память при росте); общую логику вставки/удаления вынести из `yasl/vec/vector.h` в helper-функции.
   Файл `yasl/vec/small_vector.h`. P1.
 - [ ] **4.5 `PriorityQueue<T, Cmp>`** (Rust `BinaryHeap`, Java `PriorityQueue`) поверх `Vector`. `push/pop/top/into_sorted()`. P1.

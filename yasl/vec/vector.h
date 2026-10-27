@@ -7,46 +7,11 @@
 #include <yasl/sys/optional.h>
 #include <yasl/sys/span.h>
 #include <yasl/sys/utility.h>
+#include <yasl/vec/ops.h>
 
 #include <initializer_list> // language support for braced lists
 
 namespace yasl {
-    // An iterator/sentinel pair we can walk once.
-    template <class It, class S>
-    concept IteratorRange = requires(It it, S s) {
-        *it;
-        ++it;
-        { it != s } -> ConvertibleTo<bool>;
-    };
-
-    namespace detail {
-        // Moves n objects from src into raw storage at dst and destroys the originals.
-        // On exception dst is cleaned up and src is left untouched.
-        template <class T>
-        void relocate(T* src, size_t n, T* dst) {
-            if constexpr (TriviallyCopyable<T>) {
-                if (n) {
-                    yasl::mem_copy(static_cast<void*>(dst), static_cast<const void*>(src), n * sizeof(T));
-                }
-            } else {
-                size_t i = 0;
-                try {
-                    for (; i < n; ++i) {
-                        if constexpr (NothrowMoveConstructible<T> || !CopyConstructible<T>) {
-                            yasl::construct_at(dst + i, yasl::move(src[i]));
-                        } else {
-                            yasl::construct_at(dst + i, static_cast<const T&>(src[i]));
-                        }
-                    }
-                } catch (...) {
-                    yasl::destroy_n(dst, i);
-                    throw;
-                }
-                yasl::destroy_n(src, n);
-            }
-        }
-    }
-
     // Dynamic array that allocates from a mem::Resource.
     //
     //   * the resource is a runtime value, not a template parameter;
@@ -336,12 +301,7 @@ namespace yasl {
             if (size_ == cap_) {
                 reserve(grow_capacity(size_ + 1));
             }
-            yasl::construct_at(data_ + size_, yasl::move(data_[size_ - 1]));
-            ++size_;
-            for (size_t i = size_ - 2; i > idx; --i) {
-                data_[i] = yasl::move(data_[i - 1]);
-            }
-            data_[idx] = yasl::move(tmp);
+            detail::insert_inside(data_, size_, idx, yasl::move(tmp));
             return data_ + idx;
         }
 
@@ -376,32 +336,14 @@ namespace yasl {
             T* f = data_ + (first - data_);
             T* l = data_ + (last - data_);
             YASL_ASSERT(data_ <= f && f <= l && l <= data_ + size_);
-            if (f != l) {
-                T* out = f;
-                for (T* in = l; in != end(); ++in, ++out) {
-                    *out = yasl::move(*in);
-                }
-                yasl::destroy(out, end());
-                size_ -= size_t(l - f);
-            }
+            detail::erase_range(data_, size_, size_t(f - data_), size_t(l - data_));
             return f;
         }
 
         // Removes every element matching pred, returns how many were removed.
         template <class Pred>
         size_t erase_if(Pred pred) {
-            T* out = data_;
-            for (T* in = data_; in != end(); ++in) {
-                if (!pred(*in)) {
-                    if (out != in) {
-                        *out = yasl::move(*in);
-                    }
-                    ++out;
-                }
-            }
-            size_t n = size_t(end() - out);
-            erase(out, end());
-            return n;
+            return detail::erase_if(data_, size_, pred);
         }
 
         // Keeps only the elements for which pred(element) holds (Rust retain).
@@ -426,19 +368,7 @@ namespace yasl {
         // Drops an element when same(previous kept, element) holds.
         template <class Same>
         void dedup_by(Same same) {
-            if (size_ < 2) {
-                return;
-            }
-            T* out = data_;
-            for (T* in = data_ + 1; in != end(); ++in) {
-                if (!same(static_cast<const T&>(*out), static_cast<const T&>(*in))) {
-                    ++out;
-                    if (out != in) {
-                        *out = yasl::move(*in);
-                    }
-                }
-            }
-            erase(out + 1, end());
+            detail::dedup_by(data_, size_, same);
         }
 
         template <class Key>
@@ -698,27 +628,11 @@ namespace yasl {
 
         template <class It, class S>
         static void copy_construct(It first, S last, T* dst) {
-            T* cur = dst;
-            try {
-                for (; first != last; ++first, ++cur) {
-                    yasl::construct_at(cur, *first);
-                }
-            } catch (...) {
-                yasl::destroy(dst, cur);
-                throw;
-            }
+            detail::copy_construct(yasl::move(first), yasl::move(last), dst);
         }
 
         static void fill_construct(T* dst, size_t n, const T& value) {
-            size_t i = 0;
-            try {
-                for (; i < n; ++i) {
-                    yasl::construct_at(dst + i, value);
-                }
-            } catch (...) {
-                yasl::destroy_n(dst, i);
-                throw;
-            }
+            detail::fill_construct(dst, n, value);
         }
 
         void reset() noexcept {
