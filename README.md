@@ -162,6 +162,16 @@ String all = io::read_file("data.txt");
 типы `d x X o b c f e s`. Свои типы — через `operator<<(io::Output&, const T&)`
 или `format_value(io::Output&, const T&, const io::FormatSpec&)` (находится по ADL).
 
+Числовые обёртки `yasl/io/fmt.h` (работают в потоках и внутри `format("{}")`):
+
+```cpp
+sb << "t=" << fmt::fixed(dt, 3) << " id=" << fmt::hex(id).width(8).zero_pad();
+out << fmt::grouped(1000000) << ' ' << fmt::bytes(1536) << ' ' << fmt::percent(0.256, 1);
+// 1_000_000 1.5 KiB 25.6%
+```
+
+`fmt::num hex HEX oct bin fixed sci pad grouped bytes percent`; модификаторы `.width .fill .left .right .center .plus .alt .zero_pad .precision`.
+
 ## Потокобезопасность
 
 `String` и `Shared` используют атомарный счётчик ссылок; копии можно свободно передавать между потоками.

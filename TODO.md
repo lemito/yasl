@@ -95,7 +95,7 @@
 
 `format("{}")` и `FormatSpec` остаются (`yasl/io/output.h`, `yasl/io/output.cpp`).
 
-- [ ] **3.1 Числовые обёртки для StringBuilder / любого `io::Output`.** Файл `yasl/io/fmt.h`, namespace `yasl::fmt`.
+- [x] **3.1 Числовые обёртки для StringBuilder / любого `io::Output`.** Файл `yasl/io/fmt.h`, namespace `yasl::fmt`.
   - Тип `template <Arithmetic T> struct Num { T v; io::FormatSpec spec; }` с цепочками-модификаторами:
     `.width(n) .fill(c) .left() .right() .center() .plus() .zero_pad() .precision(n)`.
   - Фабрики: `fmt::num(x)`, `fmt::hex(n)`, `fmt::HEX(n)`, `fmt::oct(n)`, `fmt::bin(n)`, `fmt::fixed(x, prec)`,
