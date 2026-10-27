@@ -31,7 +31,7 @@ cd build && ctest                # тесты + проверка include-пол�
 |---|---|
 | `yasl/sys` | type traits и концепты на builtins, `move/forward/swap`, `Optional`, `Result`, `Function`, `defer`, `checked_*`, `sort`, `Duration`/`Instant`/`SystemTime`, `Thread`, `Guarded<T>`/`RwLock<T>`/`CondVar`/`Once`/`OnceLock`/`Lazy`, `Channel` (`make_channel`), `Pair`, `Span`, `Less`, алгоритмы, исключения, хеш, `Mutex` (pthread) |
 | `yasl/mem` | `Resource`, `Arena`, `InlineArena<N>`, `Pool`, `Tracking`, `Synchronized<R>` |
-| `yasl/vec` | `Vector<T>` (+ `retain`, `dedup`, `sort`, `sort_by_key`, `contains`, `index_of`, `first`/`last`, `extend`, `drain`, `split_off`, `chunks`/`windows`) |
+| `yasl/vec` | `Deque<T>`, `Vector<T>` (+ `retain`, `dedup`, `sort`, `sort_by_key`, `contains`, `index_of`, `first`/`last`, `extend`, `drain`, `split_off`, `chunks`/`windows`) |
 | `yasl/str` | `StringView`, `String` (copy-on-write), `StringBuilder`, `num` — числа ⇄ текст |
 | `yasl/io` | `Output`/`Input`, форматирование `format("{}")`, файлы, строковые потоки, `out()/err()/in()` |
 | `yasl/map` | `HashMap/HashSet` (`hash_map.h`), `BTreeMap/BTreeSet`, `TreapMap/TreapSet`, `Trie<V>` |

@@ -154,7 +154,7 @@
     Плюс `reserve`, `load_factor`, `erase_if(pred)`, `retain(pred)`.
   - Защита от HashDoS: случайный seed на процесс (из `getrandom`/`/dev/urandom`, добавить `sys/random.h` в ALLOWED или читать файл).
   - Готово, когда: рандомизированные тесты против `std::unordered_map`, тест на удаление/повторную вставку (tombstones), Tracking.
-- [ ] **4.3 `Deque<T>`** (Rust `VecDeque`, Java `ArrayDeque`): кольцевой буфер, `push/pop_front/back`, `operator[]`,
+- [x] **4.3 `Deque<T>`** (Rust `VecDeque`, Java `ArrayDeque`): кольцевой буфер, `push/pop_front/back`, `operator[]`,
   итераторы произвольного доступа. Файл `yasl/vec/deque.h`. P1.
 - [ ] **4.4 `SmallVector<T, N>`** — inline-буфер на N элементов, далее heap. Отдельный тип (не `Vector` + `InlineArena`:
   арена не освобождает память при росте); общую логику вставки/удаления вынести из `yasl/vec/vector.h` в helper-функции.
