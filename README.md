@@ -34,6 +34,13 @@ cmake --install build --prefix /opt/yasl
 #   target_link_libraries(app PRIVATE yasl::yasl)
 ```
 
+Бенчмарки (против std, отдельная цель, не в ctest; собирать в Release):
+
+```sh
+cmake -S . -B build-bench -DCMAKE_BUILD_TYPE=Release -DYASL_BUILD_BENCH=ON && cmake --build build-bench -j
+./build-bench/yasl_bench [фильтр]
+```
+
 ## Структура
 
 | Модуль | Что внутри |

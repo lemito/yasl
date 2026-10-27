@@ -222,7 +222,7 @@
     (`-ftime-trace` у clang). Результаты записать в `Done.txt`.
 - [x] **8.2 Установка и пакетирование:** `install()` + `yaslConfig.cmake` для `find_package(yasl)`. P2.
 - [x] **8.3 CI** (GitHub Actions): clang ASan+UBSan, clang TSan, GCC Release `-Werror`, include-policy. P2.
-- [ ] **8.4 Бенчмарки** `yasl/bench/` (отдельная цель, не в ctest): `BTreeMap` vs `std::map`, `HashMap` vs `std::unordered_map`,
+- [x] **8.4 Бенчмарки** `yasl/bench/` (отдельная цель, не в ctest): `BTreeMap` vs `std::map`, `HashMap` vs `std::unordered_map`,
   `String`/`format` vs std. Простой таймер на `Instant`. `Зависит от:` 6.1. P2.
 
 ## Фаза 9. Платформы — P3

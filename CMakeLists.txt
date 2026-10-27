@@ -5,6 +5,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(YASL_BUILD_TESTS "Build yasl tests" ${PROJECT_IS_TOP_LEVEL})
+option(YASL_BUILD_BENCH "Build the benchmarks (yasl/bench)" OFF)
 option(YASL_SANITIZE "Build with AddressSanitizer + UBSan" OFF)
 
 find_package(Threads REQUIRED)
@@ -12,6 +13,7 @@ find_package(Threads REQUIRED)
 file(GLOB_RECURSE YASL_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/yasl/*.cpp)
 list(FILTER YASL_SOURCES EXCLUDE REGEX "_test\\.cpp$")
 list(FILTER YASL_SOURCES EXCLUDE REGEX "/yasl/test/")
+list(FILTER YASL_SOURCES EXCLUDE REGEX "/yasl/bench/")
 
 add_library(yasl STATIC ${YASL_SOURCES})
 add_library(yasl::yasl ALIAS yasl)
@@ -64,4 +66,10 @@ if(YASL_BUILD_TESTS)
     add_test(NAME yasl_format_compile_fail
         COMMAND ${CMAKE_COMMAND} -DCXX=${CMAKE_CXX_COMPILER} -DROOT=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_compile_fail.cmake)
+endif()
+
+# Benchmarks: not part of ctest.
+if(YASL_BUILD_BENCH)
+    add_executable(yasl_bench yasl/bench/bench.cpp)
+    target_link_libraries(yasl_bench PRIVATE yasl)
 endif()

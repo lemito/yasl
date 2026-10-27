@@ -3,7 +3,7 @@
 # Allowed: language-support headers the compiler needs (<new>, <initializer_list>,
 # <compare>, <cstddef>, <cstdint>), <atomic>, and OS / C runtime headers.
 # sys/random.h: getrandom() for the per-process hash seed; time.h: clock_gettime() for Instant; sched.h: sched_yield() for this_thread::yield().
-# yasl/compat/ (std interop), tests and the test runner are exempt.
+# yasl/compat/ (std interop), tests, the test runner and yasl/bench are exempt.
 
 set(ALLOWED
     cstddef cstdint stddef.h stdint.h new initializer_list compare atomic
@@ -12,7 +12,7 @@ set(ALLOWED
 file(GLOB_RECURSE FILES "${ROOT}/yasl/*.h" "${ROOT}/yasl/*.cpp")
 set(BAD 0)
 foreach(F ${FILES})
-    if(F MATCHES "/yasl/compat/" OR F MATCHES "_test\\.cpp$" OR F MATCHES "/yasl/test/")
+    if(F MATCHES "/yasl/compat/" OR F MATCHES "_test\\.cpp$" OR F MATCHES "/yasl/test/" OR F MATCHES "/yasl/bench/")
         continue()
     endif()
     file(STRINGS "${F}" LINES REGEX "^[ \t]*#[ \t]*include[ \t]*<")
