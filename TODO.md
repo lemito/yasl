@@ -159,7 +159,7 @@
 - [x] **4.4 `SmallVector<T, N>`** — inline-буфер на N элементов, далее heap. Отдельный тип (не `Vector` + `InlineArena`:
   арена не освобождает память при росте); общую логику вставки/удаления вынести из `yasl/vec/vector.h` в helper-функции.
   Файл `yasl/vec/small_vector.h`. P1.
-- [ ] **4.5 `PriorityQueue<T, Cmp>`** (Rust `BinaryHeap`, Java `PriorityQueue`) поверх `Vector`. `push/pop/top/into_sorted()`. P1.
+- [x] **4.5 `PriorityQueue<T, Cmp>`** (Rust `BinaryHeap`, Java `PriorityQueue`) поверх `Vector`. `push/pop/top/into_sorted()`. P1.
 - [x] **4.6 Kotlin/Rust-методы `Vector`:** `retain(pred)`, `remove_if`, `dedup()`, `sort()`, `sort_by_key`, `contains`,
   `index_of -> Optional<size_t>`, `first()/last() -> Optional<T&>`, `extend(range)`, `drain(range)`, `split_off(i)`,
   `chunks(n)`/`windows(n)` (возвращают `Span`). `Зависит от:` 1.2, 1.6. P1.

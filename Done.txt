@@ -19,3 +19,4 @@
 2026-10-27 4.6 Методы Vector (retain, dedup, sort, drain, split_off, chunks/windows и др.) — коммит "Add Kotlin/Rust-style Vector methods"
 2026-10-27 4.3 Deque<T> — коммит "Add Deque"
 2026-10-27 4.4 SmallVector<T,N> (общие хелперы вынесены в vec/ops.h и используются Vector) — коммит "Add SmallVector"
+2026-10-27 4.5 PriorityQueue<T,Cmp> (+ Greater) — коммит "Add PriorityQueue"

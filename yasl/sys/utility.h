@@ -149,6 +149,14 @@ namespace yasl {
         }
     };
 
+    // Transparent ">": with PriorityQueue it gives a min-heap.
+    struct Greater {
+        template <class A, class B>
+        constexpr bool operator()(const A& a, const B& b) const noexcept(noexcept(a > b)) {
+            return a > b;
+        }
+    };
+
     struct Identity {
         template <class T>
         constexpr const T& operator()(const T& v) const noexcept {
