@@ -1,0 +1,262 @@
+#include <yasl/mem/arena.h>
+#include <yasl/mem/tracking.h>
+#include <yasl/str/builder.h>
+#include <yasl/str/str.h>
+#include <yasl/str/view.h>
+#include <yasl/test/test.h>
+
+#include <string>
+#include <thread>
+#include <vector>
+
+using namespace yasl;
+using namespace yasl::literals;
+
+YASL_TEST(view_basics) {
+    constexpr StringView v = "hello, world"_sv;
+    static_assert(v.size() == 12);
+    static_assert(v.starts_with("hello"));
+    static_assert(v.find(',') == 5);
+    static_assert(v.find("world") == 7);
+    CHECK_EQ(v.substr(7), "world"_sv);
+    CHECK_EQ(v.substr(100), ""_sv);
+    CHECK_EQ(v.substr(7, 100), "world"_sv);
+    CHECK_EQ(v.first(5), "hello"_sv);
+    CHECK_EQ(v.last(5), "world"_sv);
+    CHECK_EQ(v.drop_front(7).drop_back(2), "wor"_sv);
+    CHECK(v.contains("o, w"));
+    CHECK(!v.contains('z'));
+    CHECK_EQ(v.rfind('o'), size_t(8));
+    CHECK_EQ(v.rfind("o"), size_t(8));
+    CHECK_EQ(v.rfind("hello"), size_t(0));
+    CHECK_EQ(v.rfind('o', 5), size_t(4));
+    CHECK_EQ(v.find("xyz"), StringView::npos);
+    CHECK(v.ends_with('d'));
+    CHECK(StringView() == ""_sv);
+    CHECK(StringView(nullptr).empty());
+    CHECK("abc"_sv < "abd"_sv);
+    CHECK("ab"_sv < "abc"_sv);
+    std::string owner = "xyz";
+    CHECK_EQ(StringView(owner), "xyz"_sv);
+    CHECK_EQ(hash_value("abc"_sv), hash_value(String("abc")));
+}
+
+YASL_TEST(view_trim_split) {
+    CHECK_EQ("  \t padded \n"_sv.trim(), "padded"_sv);
+    CHECK_EQ("   "_sv.trim(), ""_sv);
+    CHECK_EQ("xxabcxx"_sv.trim("x"), "abc"_sv);
+    CHECK_EQ("  a "_sv.trim_left(), "a "_sv);
+    CHECK_EQ("  a "_sv.trim_right(), "  a"_sv);
+
+    auto kv = "key = value"_sv.split_once('=');
+    CHECK(kv.has_value());
+    CHECK_EQ(kv->first.trim(), "key"_sv);
+    CHECK_EQ(kv->second.trim(), "value"_sv);
+    CHECK(!"novalue"_sv.split_once('=').has_value());
+    CHECK_EQ("a.b.c"_sv.rsplit_once('.')->second, "c"_sv);
+    CHECK_EQ("a::b::c"_sv.split_once("::")->second, "b::c"_sv);
+
+    std::vector<std::string> parts;
+    for (StringView p : "a,,b,c"_sv.split(',')) {
+        parts.emplace_back(p.data(), p.size());
+    }
+    CHECK((parts == std::vector<std::string>{"a", "", "b", "c"}));
+
+    parts.clear();
+    for (StringView p : ""_sv.split(',')) {
+        parts.emplace_back(p.data(), p.size());
+    }
+    CHECK((parts == std::vector<std::string>{""}));
+
+    parts.clear();
+    for (StringView p : "1<>2<>"_sv.split("<>")) {
+        parts.emplace_back(p.data(), p.size());
+    }
+    CHECK((parts == std::vector<std::string>{"1", "2", ""}));
+}
+
+YASL_TEST(view_parse) {
+    CHECK("42"_sv.parse<int>() == 42);
+    CHECK("-7"_sv.parse<long>() == -7L);
+    CHECK("+7"_sv.parse<unsigned>() == 7u);
+    CHECK(!"42x"_sv.parse<int>().has_value());
+    CHECK(!""_sv.parse<int>().has_value());
+    CHECK(!"-"_sv.parse<int>().has_value());
+    CHECK(!"300"_sv.parse<uint8>().has_value());
+    CHECK(!"-1"_sv.parse<uint32>().has_value());
+    CHECK("-128"_sv.parse<int8>() == int8(-128));
+    CHECK(!"-129"_sv.parse<int8>().has_value());
+    CHECK("18446744073709551615"_sv.parse<uint64>() == 18446744073709551615ull);
+    CHECK(!"18446744073709551616"_sv.parse<uint64>().has_value());
+    CHECK("-9223372036854775808"_sv.parse<int64>() == min_value<int64>());
+    CHECK("2.5"_sv.parse<double>() == 2.5);
+    CHECK("-1e3"_sv.parse<double>() == -1000.0);
+    CHECK(".5"_sv.parse<double>() == 0.5);
+    CHECK("5."_sv.parse<double>() == 5.0);
+    CHECK(!"."_sv.parse<double>().has_value());
+    CHECK(!"1e"_sv.parse<double>().has_value());
+    CHECK(!"1.2.3"_sv.parse<double>().has_value());
+}
+
+YASL_TEST(string_basic) {
+    String s = "hello";
+    CHECK_EQ(s.size(), size_t(5));
+    CHECK_EQ(s, "hello");
+    CHECK("hello" == s);
+    CHECK(s == String("hello"));
+    CHECK(s < "help");
+    CHECK(String("a") < String("b"));
+    s += ", world";
+    s += '!';
+    CHECK_EQ(s, "hello, world!");
+    CHECK_EQ(s.find("world"), size_t(7));
+    CHECK_EQ(s.substr(7, 5), "world");
+    CHECK_EQ(s + "?", "hello, world!?");
+    CHECK_EQ("<" + s, "<hello, world!");
+    CHECK_EQ(s + s, "hello, world!hello, world!");
+    CHECK_THROWS(s.at(100), OutOfRange);
+
+    String e;
+    CHECK(e.empty());
+    CHECK_EQ(StringView(e.c_str()), ""_sv);
+    e.clear();
+    CHECK_EQ(e.capacity(), size_t(0));
+}
+
+YASL_TEST(string_cow) {
+    mem::Tracking t;
+    {
+        String a("shared buffer", &t);
+        String b = a;
+        CHECK_EQ(a.data(), b.data());
+        CHECK(a.is_shared());
+        CHECK_EQ(a.use_count(), size_t(2));
+        CHECK_EQ(t.stats().live(), size_t(1));
+
+        b.set(0, 'S');
+        CHECK(a.data() != b.data());
+        CHECK_EQ(a, "shared buffer");
+        CHECK_EQ(b, "Shared buffer");
+        CHECK(!a.is_shared());
+        CHECK_EQ(t.stats().live(), size_t(2));
+
+        String c = a;
+        c += "!";
+        CHECK_EQ(a, "shared buffer");
+        CHECK_EQ(c, "shared buffer!");
+
+        String d = a;
+        d.clear();
+        CHECK_EQ(a, "shared buffer");
+
+        String e = a;
+        char* p = e.mut_data();
+        p[1] = 'H';
+        CHECK_EQ(a, "shared buffer");
+        CHECK_EQ(e, "sHared buffer");
+
+        String f(a, mem::system_resource());
+        CHECK(f.data() != a.data());
+        CHECK_EQ(f, a);
+    }
+    CHECK_EQ(t.stats().live(), size_t(0));
+}
+
+YASL_TEST(string_self_aliasing) {
+    String s = "abc";
+    s.append(s);
+    CHECK_EQ(s, "abcabc");
+    s.append(s.view().substr(1, 2));
+    CHECK_EQ(s, "abcabcbc");
+    s.insert(0, s.view().last(2));
+    CHECK_EQ(s, "bcabcabcbc");
+    s.replace(2, 3, s.view().first(4));
+    CHECK_EQ(s, "bcbcababcbc");
+    s = s.view().substr(2, 3);
+    CHECK_EQ(s, "bca");
+}
+
+YASL_TEST(string_edit) {
+    String s = "0123456789";
+    s.erase(2, 3);
+    CHECK_EQ(s, "0156789");
+    s.insert(2, "234");
+    CHECK_EQ(s, "0123456789");
+    s.replace(0, 5, "ab");
+    CHECK_EQ(s, "ab56789");
+    s.resize(3);
+    CHECK_EQ(s, "ab5");
+    s.resize(5, '.');
+    CHECK_EQ(s, "ab5..");
+    s.pop_back();
+    CHECK_EQ(s, "ab5.");
+    s.erase(1);
+    CHECK_EQ(s, "a");
+    s.append(3, 'z');
+    CHECK_EQ(s, "azzz");
+    s = "";
+    CHECK(s.empty());
+}
+
+YASL_TEST(string_threads_share) {
+    String base(1000, 'x');
+    std::vector<std::thread> threads;
+    for (int k = 0; k < 4; ++k) {
+        threads.emplace_back([base] {
+            for (int i = 0; i < 1000; ++i) {
+                String copy = base;
+                if (i % 10 == 0) {
+                    copy.set(0, 'y');
+                }
+            }
+        });
+    }
+    for (auto& th : threads) {
+        th.join();
+    }
+    CHECK_EQ(base.use_count(), size_t(1));
+    CHECK_EQ(base[0], 'x');
+}
+
+YASL_TEST(builder_basic) {
+    StringBuilder b;
+    b << "int=" << 42 << " neg=" << -7 << " u=" << 18446744073709551615ull;
+    b << " c=" << 'x' << " b=" << true << " d=" << 0.25;
+    CHECK_EQ(b.view(), "int=42 neg=-7 u=18446744073709551615 c=x b=true d=0.25"_sv);
+
+    b.clear();
+    b.format("{}-{:03}", "id", 7).append(2, '!');
+    CHECK_EQ(b.view(), "id-007!!"_sv);
+
+    String snapshot = b.str();
+    CHECK_EQ(snapshot.data(), b.c_str());
+    b << "more";
+    CHECK_EQ(snapshot, "id-007!!");
+    CHECK_EQ(b.view(), "id-007!!more"_sv);
+
+    String taken = b.take();
+    CHECK(b.empty());
+    CHECK_EQ(taken, "id-007!!more");
+
+    StringBuilder cont(String("start:"));
+    cont << 1;
+    CHECK_EQ(cont.view(), "start:1"_sv);
+}
+
+YASL_TEST(builder_large_and_arena) {
+    mem::Arena arena;
+    StringBuilder b(&arena);
+    for (int i = 0; i < 10000; ++i) {
+        b << i << ',';
+    }
+    String s = b.take();
+    CHECK_EQ(s.resource(), static_cast<mem::Resource*>(&arena));
+    CHECK(s.starts_with("0,1,2,"));
+    CHECK(s.ends_with("9998,9999,"));
+
+    StringBuilder big;
+    String chunk(5000, 'q');
+    big << "<" << chunk << ">";
+    CHECK_EQ(big.size(), size_t(5002));
+    CHECK_EQ(to_string(12.5), "12.5");
+}
