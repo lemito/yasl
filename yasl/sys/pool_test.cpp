@@ -1,3 +1,4 @@
+#include <yasl/mem/sync.h>
 #include <yasl/mem/tracking.h>
 #include <yasl/str/str.h>
 #include <yasl/sys/atomic.h>
@@ -68,7 +69,7 @@ YASL_TEST(pool_spawn_futures) {
 }
 
 YASL_TEST(pool_runs_queued_tasks_on_destruction) {
-    mem::Tracking t;
+    mem::Synchronized<mem::Tracking> t; // the workers free what the main thread allocated
     AtomicInt n;
     {
         ThreadPool pool(2, &t);
@@ -80,5 +81,5 @@ YASL_TEST(pool_runs_queued_tasks_on_destruction) {
         }
     }
     CHECK_EQ(n.load(), 50);
-    CHECK_EQ(t.stats().live(), size_t(0));
+    CHECK_EQ(t.inner().stats().live(), size_t(0));
 }

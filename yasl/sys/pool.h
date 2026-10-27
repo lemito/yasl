@@ -150,7 +150,8 @@ namespace yasl {
     };
 
     // A fixed set of worker threads running queued tasks (no work stealing). The destructor
-    // finishes the queued tasks, then joins the workers.
+    // finishes the queued tasks, then joins the workers. The resource is used from several
+    // threads at once: pass a thread-safe one (mem::Synchronized<...>, the default resource).
     //
     //     ThreadPool pool(4);
     //     Future<int> f = pool.spawn([] { return heavy(); });

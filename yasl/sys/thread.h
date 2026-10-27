@@ -15,7 +15,8 @@ namespace yasl {
     public:
         Thread() noexcept = default;
 
-        // Starts running f right away. `res` holds the callable if it does not fit inline.
+        // Starts running f right away. `res` holds the callable if it does not fit inline; the new
+        // thread frees that memory, so a non-default `res` must be thread-safe.
         template <class F>
             requires(!SameAs<RemoveCVRef<F>, Thread> && Invocable<RemoveCVRef<F>&>)
         explicit Thread(F&& f, mem::Resource* res = mem::default_resource())
