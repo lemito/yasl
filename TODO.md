@@ -70,7 +70,7 @@
 
 ## Фаза 2. Умные указатели (`yasl/ptr`) — P0
 
-- [ ] **2.1 `Unique<T>`** (unique_ptr / Rust `Box`). Файл `yasl/ptr/unique.h`.
+- [x] **2.1 `Unique<T>`** (unique_ptr / Rust `Box`). Файл `yasl/ptr/unique.h`.
   - Поля: `T* p_`, `mem::Resource* res_`, `void (*drop_)(mem::Resource*, void*)`. `drop_` создаётся в
     `make_unique_in<U>` и знает точный тип `U` → разрешено преобразование `Unique<Derived>` → `Unique<Base>`
     (требовать `__has_virtual_destructor(Base)` или совпадение типов; добавить `HasVirtualDestructor`, `DerivedFrom` в traits).

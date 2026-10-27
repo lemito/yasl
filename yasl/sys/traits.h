@@ -189,6 +189,12 @@ namespace yasl {
     concept NothrowMoveConstructible = __is_nothrow_constructible(T, T&&);
 
     template <class T>
+    concept HasVirtualDestructor = __has_virtual_destructor(T);
+
+    template <class Derived, class Base>
+    concept DerivedFrom = __is_base_of(Base, Derived) && __is_convertible_to(const volatile Derived*, const volatile Base*);
+
+    template <class T>
     concept TriviallyCopyable = __is_trivially_copyable(T);
 
 #if defined(__has_builtin) && __has_builtin(__is_trivially_destructible)
