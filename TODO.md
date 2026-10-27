@@ -193,7 +193,7 @@
   `yasl/str/view.h`, `yasl/str/str.h`; добавить отсутствующее из списка: `lines()`, `split_whitespace()`,
   `replace(from, to)`, `repeat(n)`, `to_upper/to_lower` (ASCII), `strip_prefix/strip_suffix -> Optional<StringView>`,
   `contains`, `count(sub)`, `join(sep, range)` (свободная функция), `parse<T>() -> Result<T, ParseError>` (рядом с существующим Optional-вариантом).
-- [ ] **7.2 UTF-8** (Rust `chars()`, Go `range string`): `chars()` — итератор по code point (`char32_t`), `is_valid_utf8()`,
+- [x] **7.2 UTF-8** (Rust `chars()`, Go `range string`): `chars()` — итератор по code point (`char32_t`), `is_valid_utf8()`,
   `char_count()`, кодирование `push_char(char32_t)` в `StringBuilder`. P2.
 - [ ] **7.3 Ленивые адаптеры итерации** (Rust iterators, Kotlin sequences, C# LINQ). Файл `yasl/sys/iter.h`.
   Пайп-стиль: `v | map(f) | filter(p) | take(n)`, плюс `enumerate`, `zip`, `reverse`, `range(a, b)`, терминальные

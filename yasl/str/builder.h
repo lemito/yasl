@@ -48,6 +48,13 @@ namespace yasl {
             return *this;
         }
 
+        // Appends a code point as UTF-8 (invalid ones as U+FFFD).
+        StringBuilder& push_char(char32_t cp) {
+            char buf[4];
+            write(buf, utf8::encode(cp, buf));
+            return *this;
+        }
+
         // For generic back-inserting code.
         void push_back(char c) {
             put(c);

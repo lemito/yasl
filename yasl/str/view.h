@@ -7,8 +7,89 @@
 
 #include <compare> // operator<=> result types: language support
 
+namespace yasl::utf8 {
+    inline constexpr char32_t kReplacement = 0xFFFD;
+
+    // Decodes one code point from [p, end), p < end. Returns the bytes consumed (1..4) and
+    // sets `out`; malformed input (bad lead/continuation, overlong, surrogate, > U+10FFFF,
+    // truncated) yields U+FFFD and consumes one byte.
+    constexpr size_t decode(const char* p, const char* end, char32_t& out) noexcept {
+        unsigned char b0 = static_cast<unsigned char>(p[0]);
+        if (b0 < 0x80) {
+            out = b0;
+            return 1;
+        }
+        size_t n = 0;
+        char32_t cp = 0;
+        char32_t min = 0;
+        if (b0 >= 0xC2 && b0 <= 0xDF) {
+            n = 2;
+            cp = b0 & 0x1F;
+            min = 0x80;
+        } else if (b0 >= 0xE0 && b0 <= 0xEF) {
+            n = 3;
+            cp = b0 & 0x0F;
+            min = 0x800;
+        } else if (b0 >= 0xF0 && b0 <= 0xF4) {
+            n = 4;
+            cp = b0 & 0x07;
+            min = 0x10000;
+        } else {
+            out = kReplacement;
+            return 1;
+        }
+        if (size_t(end - p) < n) {
+            out = kReplacement;
+            return 1;
+        }
+        for (size_t i = 1; i < n; ++i) {
+            unsigned char b = static_cast<unsigned char>(p[i]);
+            if ((b & 0xC0) != 0x80) {
+                out = kReplacement;
+                return 1;
+            }
+            cp = (cp << 6) | (b & 0x3F);
+        }
+        if (cp < min || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) {
+            out = kReplacement;
+            return 1;
+        }
+        out = cp;
+        return n;
+    }
+
+    // Writes cp as UTF-8 (4 bytes at most) and returns the length. Invalid code points
+    // (surrogates, > U+10FFFF) are written as U+FFFD.
+    constexpr size_t encode(char32_t cp, char* buf) noexcept {
+        if (cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) {
+            cp = kReplacement;
+        }
+        if (cp < 0x80) {
+            buf[0] = char(cp);
+            return 1;
+        }
+        if (cp < 0x800) {
+            buf[0] = char(0xC0 | (cp >> 6));
+            buf[1] = char(0x80 | (cp & 0x3F));
+            return 2;
+        }
+        if (cp < 0x10000) {
+            buf[0] = char(0xE0 | (cp >> 12));
+            buf[1] = char(0x80 | ((cp >> 6) & 0x3F));
+            buf[2] = char(0x80 | (cp & 0x3F));
+            return 3;
+        }
+        buf[0] = char(0xF0 | (cp >> 18));
+        buf[1] = char(0x80 | ((cp >> 12) & 0x3F));
+        buf[2] = char(0x80 | ((cp >> 6) & 0x3F));
+        buf[3] = char(0x80 | (cp & 0x3F));
+        return 4;
+    }
+}
+
 namespace yasl {
     class SplitRange;
+    class CharsRange;
     class LinesRange;
     class WordsRange;
 
@@ -359,6 +440,33 @@ namespace yasl {
             return n;
         }
 
+        // Code points of the UTF-8 text; malformed bytes show up as U+FFFD (one per byte).
+        //
+        //     for (char32_t c : "héllo"_sv.chars()) ...
+        constexpr CharsRange chars() const noexcept;
+
+        // Number of code points (as chars() would yield them).
+        constexpr size_t char_count() const noexcept;
+
+        // True if the whole text is well-formed UTF-8.
+        constexpr bool is_valid_utf8() const noexcept {
+            const char* p = p_;
+            const char* e = p_ + n_;
+            while (p < e) {
+                if (static_cast<unsigned char>(*p) < 0x80) {
+                    ++p;
+                    continue;
+                }
+                char32_t cp;
+                size_t n = utf8::decode(p, e, cp);
+                if (cp == utf8::kReplacement && n == 1) {
+                    return false;
+                }
+                p += n;
+            }
+            return true;
+        }
+
         // Lines split at '\n', a trailing '\r' dropped; no empty piece after a final newline.
         constexpr LinesRange lines() const noexcept;
 
@@ -500,6 +608,80 @@ namespace yasl {
         StringView text_;
         StringView sep_;
     };
+
+    class CharsRange {
+    public:
+        class iterator {
+        public:
+            using value_type = char32_t;
+            using difference_type = ptrdiff_t;
+
+            constexpr iterator() noexcept = default;
+
+            explicit constexpr iterator(StringView text) noexcept
+                : rest_(text)
+            {
+                advance();
+            }
+
+            constexpr char32_t operator*() const noexcept {
+                return cur_;
+            }
+
+            constexpr iterator& operator++() noexcept {
+                advance();
+                return *this;
+            }
+
+            friend constexpr bool operator==(const iterator& it, DefaultSentinel) noexcept {
+                return it.done_;
+            }
+
+        private:
+            constexpr void advance() noexcept {
+                if (rest_.empty()) {
+                    done_ = true;
+                    return;
+                }
+                size_t n = utf8::decode(rest_.begin(), rest_.end(), cur_);
+                rest_ = rest_.drop_front(n);
+            }
+
+            StringView rest_;
+            char32_t cur_ = 0;
+            bool done_ = false;
+        };
+
+        explicit constexpr CharsRange(StringView text) noexcept
+            : text_(text)
+        {
+        }
+
+        constexpr iterator begin() const noexcept {
+            return iterator(text_);
+        }
+
+        constexpr DefaultSentinel end() const noexcept {
+            return {};
+        }
+
+    private:
+        StringView text_;
+    };
+
+    constexpr CharsRange StringView::chars() const noexcept {
+        return CharsRange(*this);
+    }
+
+    constexpr size_t StringView::char_count() const noexcept {
+        size_t n = 0;
+        for (const char* p = p_; p < p_ + n_;) {
+            char32_t cp;
+            p += utf8::decode(p, p_ + n_, cp);
+            ++n;
+        }
+        return n;
+    }
 
     class LinesRange {
     public:

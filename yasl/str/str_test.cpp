@@ -328,3 +328,42 @@ YASL_TEST(view_try_parse) {
     CHECK(StringView(r.error().what()).contains("invalid"));
     CHECK_EQ(StringView("5").parse<int>().value_or(0), 5);
 }
+
+YASL_TEST(utf8_chars_count_validate) {
+    StringView s = "h\xC3\xA9llo \xE2\x82\xAC \xF0\x9F\x98\x80";
+    std::vector<char32_t> cps;
+    for (char32_t c : s.chars()) {
+        cps.push_back(c);
+    }
+    CHECK((cps == std::vector<char32_t>{'h', 0xE9, 'l', 'l', 'o', ' ', 0x20AC, ' ', 0x1F600}));
+    CHECK_EQ(s.char_count(), size_t(9));
+    CHECK(s.is_valid_utf8());
+    CHECK(StringView("").is_valid_utf8());
+    CHECK_EQ(StringView("").char_count(), size_t(0));
+
+    // overlong, lone continuation, truncated, surrogate, too large
+    for (const char* bad : {"\xC0\x80", "\x80", "\xE2\x82", "\xED\xA0\x80", "\xF4\x90\x80\x80", "\xFF", "a\xC3"}) {
+        CHECK(!StringView(bad).is_valid_utf8());
+    }
+    std::vector<char32_t> broken;
+    for (char32_t c : StringView("a\xFF" "b").chars()) {
+        broken.push_back(c);
+    }
+    CHECK((broken == std::vector<char32_t>{'a', 0xFFFD, 'b'}));
+}
+
+YASL_TEST(utf8_encode_roundtrip) {
+    StringBuilder b;
+    for (char32_t cp : {char32_t('A'), char32_t(0xE9), char32_t(0x20AC), char32_t(0x1F600), char32_t(0x10FFFF), char32_t(0x7FF), char32_t(0x800)}) {
+        b.push_char(cp);
+    }
+    b.push_char(0xD800);   // surrogate -> U+FFFD
+    b.push_char(0x110000); // out of range -> U+FFFD
+    String out = b.take();
+    CHECK(out.view().is_valid_utf8());
+    std::vector<char32_t> back;
+    for (char32_t c : out.view().chars()) {
+        back.push_back(c);
+    }
+    CHECK((back == std::vector<char32_t>{'A', 0xE9, 0x20AC, 0x1F600, 0x10FFFF, 0x7FF, 0x800, 0xFFFD, 0xFFFD}));
+}

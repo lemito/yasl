@@ -117,6 +117,7 @@ Result<int, ParseError> r = "4x"_sv.try_parse<int>();   // r.error().kind() == P
 
 for (StringView line : text.lines()) { ... }            // без пустого хвоста, \r\n -> \n
 for (StringView w : text.split_whitespace()) { ... }
+for (char32_t c : text.chars()) { ... }                   // UTF-8; char_count(), is_valid_utf8(), StringBuilder::push_char(cp)
 "pre-x"_sv.strip_prefix("pre-");                          // Optional<StringView>
 String u = to_upper("abc");  replace_all(s, "a", "b");  repeat("ab", 3);  join(", ", names);
 
