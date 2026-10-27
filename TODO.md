@@ -171,7 +171,7 @@
   (как `std::jthread`), `this_thread::sleep_for(Duration)`, `this_thread::yield()`. `Зависит от:` 1.3, 6.1.
 - [x] **5.2 `Guarded<T>`** (Rust `Mutex<T>`): данные доступны только через `auto g = m.lock(); g->...`.
   Плюс `RwLock<T>` (pthread_rwlock), `CondVar` (pthread_cond), `Once` / `Lazy<T>` (C# `Lazy`, Rust `OnceLock`).
-- [ ] **5.3 `Channel<T>`** (Go channels): `make_channel<T>(capacity)` → `Sender<T>`/`Receiver<T>` (Shared-блок),
+- [x] **5.3 `Channel<T>`** (Go channels): `make_channel<T>(capacity)` → `Sender<T>`/`Receiver<T>` (Shared-блок),
   `send` блокирует при заполнении, `recv() -> Optional<T>` (none после close и опустошения), `try_send/try_recv`,
   `close()`, итерация `for (auto v : rx)`. `capacity == 0` → rendezvous. `Зависит от:` 2.2, 5.2.
 - [ ] **5.4 `WaitGroup`** (Go), `Latch`, `ThreadPool` + `spawn(f) -> Future<T>` (простой, без work-stealing). P2.
