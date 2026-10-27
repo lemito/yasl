@@ -156,6 +156,16 @@ for (auto [i, x] : v | enumerate()) ...
 `map filter take skip enumerate zip reverse range` и терминальные `collect<C> sum count fold any all find`.
 Источник — lvalue-контейнер (временный контейнер отвергается при компиляции).
 
+### Файловая система (`yasl/io/fs.h`)
+
+```cpp
+io::Path p = io::Path("/var/log") / "app.log";   // file_name, stem, extension, parent, is_absolute
+auto r = io::fs::create_dir_all(p);               // Result<void, io::Error>
+for (auto& e : *io::fs::read_dir("/tmp")) ...     // e.name, e.is_dir
+```
+
+`exists is_dir is_file file_size remove create_dir create_dir_all rename read_dir`.
+
 ### Числа (`yasl/str/num.h`)
 
 Свои алгоритмы вместо `printf`/`strtod`/`to_chars`:

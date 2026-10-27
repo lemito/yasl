@@ -184,7 +184,7 @@
 - [x] **6.2 `Random`** (`yasl/sys/random.h`): xoshiro256**, `seed_from_os()`, `next_u64`, `range(lo, hi)` без смещения
   (метод Лемира), `next_double`, `shuffle(Span)`. P2.
 - [x] **6.3 `env::var(name) -> Optional<StringView>`, `env::args()`** (Go `os.Args`). P2.
-- [ ] **6.4 `fs`/`path`** (Go `filepath`, Rust `std::fs`): `Path` поверх `String`, `join`, `parent`, `extension`;
+- [x] **6.4 `fs`/`path`** (Go `filepath`, Rust `std::fs`): `Path` поверх `String`, `join`, `parent`, `extension`;
   `fs::read_dir`, `exists`, `remove`, `create_dir_all` → все возвращают `Result<_, io::Error>`. P3.
 
 ## Фаза 7. Строки и итерация — P1
