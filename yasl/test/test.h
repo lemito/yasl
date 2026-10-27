@@ -1,8 +1,9 @@
 #pragma once
 
+#include <yasl/core/check.h>
 #include <yasl/str/builder.h>
 #include <yasl/str/str.h>
-#include <yasl/sys/optional.h>
+#include <yasl/vocab/optional.h>
 
 // Minimal self-registering test framework built on yasl itself.
 //
@@ -13,70 +14,95 @@
 //     }
 
 namespace yasl::test {
-    using Fn = void (*)();
+using Fn = void (*)();
 
-    void register_test(const char* name, Fn fn);
-    [[noreturn]] void fail(const char* file, int line, StringView message);
-    int run(int argc, char** argv);
+void register_test(const char* name, Fn fn);
+[[noreturn]] void fail(const char* file, int line, StringView message);
+int run(int argc, char** argv);
 
-    struct Registrar {
-        Registrar(const char* name, Fn fn) {
-            register_test(name, fn);
-        }
-    };
+struct Registrar {
+  Registrar(const char* name, Fn fn) { register_test(name, fn); }
+};
 
-    template <class T>
-    String show(const T& v) {
-        if constexpr (requires(io::Output& o, const T& x) { o << x; }) {
-            StringBuilder b;
-            b << v;
-            return b.take();
-        } else {
-            return String("<?>");
-        }
-    }
+// Thrown by the panic hook that CHECK_PANICS installs.
+struct Panicked {};
 
-    template <class A, class B>
-    Optional<String> eq_failure(const A& a, const B& b) {
-        if (a == b) {
-            return none;
-        }
-        return format("{} != {}", show(a), show(b));
-    }
+inline void throwing_panic_hook(const PanicInfo&) { throw Panicked{}; }
+
+template <class T>
+String show(const T& v) {
+  if constexpr (requires(io::Output& o, const T& x) { o << x; }) {
+    StringBuilder b;
+    b << v;
+    return b.take();
+  } else {
+    return String("<?>");
+  }
 }
 
-#define YASL_TEST(name)                                                                 \
-    static void yasl_test_##name();                                                     \
-    static ::yasl::test::Registrar yasl_test_reg_##name(#name, &yasl_test_##name);      \
-    static void yasl_test_##name()
+template <class A, class B>
+Optional<String> eq_failure(const A& a, const B& b) {
+  if (a == b) {
+    return none;
+  }
+  return format("{} != {}", show(a), show(b));
+}
+}  // namespace yasl::test
 
-#define CHECK(expr)                                                                     \
-    do {                                                                                \
-        if (!(expr)) {                                                                  \
-            ::yasl::test::fail(__FILE__, __LINE__, "CHECK(" #expr ")");                 \
-        }                                                                               \
-    } while (0)
+#define YASL_TEST(name)                                                   \
+  static void yasl_test_##name();                                         \
+  static ::yasl::test::Registrar yasl_test_reg_##name(#name,              \
+                                                      &yasl_test_##name); \
+  static void yasl_test_##name()
+
+#define CHECK(expr)                                               \
+  do {                                                            \
+    if (!(expr)) {                                                \
+      ::yasl::test::fail(__FILE__, __LINE__, "CHECK(" #expr ")"); \
+    }                                                             \
+  } while (0)
 
 // Both sides are evaluated and compared within one full-expression,
 // so temporaries such as opt->member stay alive for the comparison.
-#define CHECK_EQ(a, b)                                                                  \
-    do {                                                                                \
-        if (auto yasl_msg_ = ::yasl::test::eq_failure((a), (b))) {                      \
-            ::yasl::test::fail(__FILE__, __LINE__,                                      \
-                ::yasl::format("CHECK_EQ({}, {}): {}", ::yasl::StringView(#a),          \
-                    ::yasl::StringView(#b), *yasl_msg_));                               \
-        }                                                                               \
-    } while (0)
+#define CHECK_EQ(a, b)                                                   \
+  do {                                                                   \
+    if (auto yasl_msg_ = ::yasl::test::eq_failure((a), (b))) {           \
+      ::yasl::test::fail(                                                \
+          __FILE__, __LINE__,                                            \
+          ::yasl::format("CHECK_EQ({}, {}): {}", ::yasl::StringView(#a), \
+                         ::yasl::StringView(#b), *yasl_msg_));           \
+    }                                                                    \
+  } while (0)
 
-#define CHECK_THROWS(expr, Ex)                                                          \
-    do {                                                                                \
-        bool yasl_thrown_ = false;                                                      \
-        try {                                                                           \
-            (void)(expr);                                                               \
-        } catch (const Ex&) {                                                           \
-            yasl_thrown_ = true;                                                        \
-        }                                                                               \
-        if (!yasl_thrown_) {                                                            \
-            ::yasl::test::fail(__FILE__, __LINE__, "CHECK_THROWS(" #expr ", " #Ex ")"); \
-        }                                                                               \
-    } while (0)
+#define CHECK_THROWS(expr, Ex)                                \
+  do {                                                        \
+    bool yasl_thrown_ = false;                                \
+    try {                                                     \
+      (void)(expr);                                           \
+    } catch (const Ex&) {                                     \
+      yasl_thrown_ = true;                                    \
+    }                                                         \
+    if (!yasl_thrown_) {                                      \
+      ::yasl::test::fail(__FILE__, __LINE__,                  \
+                         "CHECK_THROWS(" #expr ", " #Ex ")"); \
+    }                                                         \
+  } while (0)
+
+// Expects `expr` to panic (YASL_ASSERT / YASL_VERIFY / YASL_INSIST / panic()).
+// Not for code that is noexcept: an exception leaving a noexcept function
+// terminates before CHECK_PANICS sees it.
+#define CHECK_PANICS(expr)                                               \
+  do {                                                                   \
+    ::yasl::PanicHook yasl_prev_ =                                       \
+        ::yasl::set_panic_hook(&::yasl::test::throwing_panic_hook);      \
+    bool yasl_panicked_ = false;                                         \
+    try {                                                                \
+      (void)(expr);                                                      \
+    } catch (const ::yasl::test::Panicked&) {                            \
+      yasl_panicked_ = true;                                             \
+    }                                                                    \
+    ::yasl::set_panic_hook(yasl_prev_);                                  \
+    if (!yasl_panicked_) {                                               \
+      ::yasl::test::fail(__FILE__, __LINE__, "CHECK_PANICS(" #expr ")"); \
+    }                                                                    \
+  } while (0)
