@@ -53,7 +53,7 @@
   - `Function` — владеющая, small-buffer 2–3 указателя, иначе аллокация через `mem::Resource`;
     поддержка move-only лямбд (как `std::move_only_function`), копирование запрещено.
   - Готово, когда: тесты SBO/heap, move-only захваты, отсутствие утечек.
-- [ ] **1.4 `defer` / `ScopeExit`** (Go `defer`). Файл `yasl/sys/defer.h`:
+- [x] **1.4 `defer` / `ScopeExit`** (Go `defer`). Файл `yasl/sys/defer.h`:
   `auto g = scope_exit([&]{...}); g.dismiss();` и макрос `YASL_DEFER { ... };`. `(независимо)`
 - [ ] **1.5 Проверенная арифметика** (Rust `checked_*`, `saturating_*`, `wrapping_*`). Файл `yasl/sys/math.h`:
   `checked_add/sub/mul -> Optional<T>` (через `__builtin_add_overflow`), `saturating_add/sub/mul`,
