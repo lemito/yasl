@@ -27,6 +27,10 @@ namespace yasl {
             pthread_mutex_unlock(&m_);
         }
 
+        pthread_mutex_t* native_handle() noexcept {
+            return &m_;
+        }
+
     private:
         pthread_mutex_t m_ = PTHREAD_MUTEX_INITIALIZER;
     };
