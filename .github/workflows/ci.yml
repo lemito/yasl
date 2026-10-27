@@ -1,0 +1,63 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  clang-asan-ubsan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DYASL_SANITIZE=ON
+      - name: Build
+        run: cmake --build build -j
+      - name: Test (includes the include-policy and compile-fail checks)
+        run: cd build && ctest --output-on-failure
+
+  clang-tsan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS=-fsanitize=thread
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        run: cd build && ctest --output-on-failure
+
+  gcc-release-werror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_CXX_COMPILER=g++ -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=-Werror
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        run: cd build && ctest --output-on-failure
+
+  include-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No standard library in the core
+        run: cmake -DROOT=$PWD -P cmake/check_includes.cmake
+
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install and use from an external project
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j
+          cmake --install build --prefix "$RUNNER_TEMP/yasl"
+          mkdir consumer && cd consumer
+          printf 'cmake_minimum_required(VERSION 3.20)\nproject(c LANGUAGES CXX)\nfind_package(yasl REQUIRED)\nadd_executable(app main.cpp)\ntarget_link_libraries(app PRIVATE yasl::yasl)\n' > CMakeLists.txt
+          printf '#include <yasl/io/file.h>\nint main() { yasl::io::println("ok {}", 1); }\n' > main.cpp
+          cmake -S . -B b -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/yasl"
+          cmake --build b
+          ./b/app
