@@ -64,7 +64,7 @@
   буфер из `mem::Resource`), `sort_by_key(first, last, key_fn)`, `binary_search -> Optional<size_t>`,
   `partition`, `nth_element`, `min_element/max_element`, `any_of/all_of/none_of`, `find_if`, `count_if`.
   Готово, когда: случайные тесты против `std::sort` на 10⁵ элементах, стабильность проверена.
-- [ ] **1.7 `Variant<Ts...>` + `match`** (Rust `enum`, Kotlin `when`). Файл `yasl/sys/variant.h`:
+- [x] **1.7 `Variant<Ts...>` + `match`** (Rust `enum`, Kotlin `when`). Файл `yasl/sys/variant.h`:
   `index()`, `is<T>()`, `get<T>() -> T*` (nullptr, без исключений), `visit`/`match(v, overloaded{...})`.
   P2, `(независимо)`.
 
