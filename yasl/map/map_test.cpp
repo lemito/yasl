@@ -298,3 +298,228 @@ YASL_TEST(map_in_arena) {
     CHECK_EQ(m.at("a").size(), size_t(2));
     CHECK_EQ(m.at("a").resource(), static_cast<mem::Resource*>(&arena));
 }
+
+namespace {
+    // Random insert/erase/lookup/order-statistics against std::map.
+    template <class V>
+    void btree_random_vs_std(unsigned seed, int ops, int key_range) {
+        mem::Tracking t;
+        {
+            BTreeMap<int, V> m(&t);
+            std::map<int, int> ref;
+            std::mt19937 rng(seed);
+            for (int i = 0; i < ops; ++i) {
+                int k = int(rng() % unsigned(key_range));
+                switch (rng() % 5) {
+                case 0:
+                case 1:
+                    m.insert_or_assign(k, V(i));
+                    ref[k] = i;
+                    break;
+                case 2:
+                    CHECK_EQ(m.erase(k), ref.erase(k));
+                    break;
+                case 3: {
+                    auto it = m.lower_bound(k);
+                    auto rit = ref.lower_bound(k);
+                    CHECK_EQ(it == m.end(), rit == ref.end());
+                    if (rit != ref.end()) {
+                        CHECK_EQ(it->key, rit->first);
+                    }
+                    CHECK_EQ(m.rank(k), size_t(std::distance(ref.begin(), rit)));
+                    break;
+                }
+                default: {
+                    if (ref.empty()) {
+                        break;
+                    }
+                    size_t idx = rng() % ref.size();
+                    auto it = m.kth(idx);
+                    CHECK_EQ(it->key, std::next(ref.begin(), long(idx))->first);
+                    CHECK_EQ(m.index_of(it), idx);
+                    break;
+                }
+                }
+                if (i % 1024 == 0) {
+                    CHECK(m.validate());
+                }
+            }
+            CHECK(m.validate());
+            CHECK_EQ(m.size(), ref.size());
+            CHECK(m.kth(ref.size()) == m.end());
+            // erase(it) hands back the successor
+            while (!ref.empty()) {
+                auto it = m.kth(ref.size() / 2);
+                int k = it->key;
+                auto next = m.erase(it);
+                auto rnext = ref.erase(ref.find(k));
+                CHECK_EQ(next == m.end(), rnext == ref.end());
+                if (rnext != ref.end()) {
+                    CHECK_EQ(next->key, rnext->first);
+                }
+            }
+            CHECK(m.empty() && m.validate());
+        }
+        CHECK_EQ(t.stats().live(), size_t(0));
+    }
+
+    struct BigVal {
+        int v;
+        char pad[100];
+        BigVal(int x = 0)
+            : v(x)
+        {
+        }
+    };
+}
+
+YASL_TEST(btree_plus_random_small_values) {
+    btree_random_vs_std<int>(1, 100000, 500);
+    btree_random_vs_std<int>(2, 100000, 100000);
+}
+
+YASL_TEST(btree_plus_random_big_values) {
+    btree_random_vs_std<BigVal>(3, 60000, 2000);
+}
+
+YASL_TEST(btree_plus_sequential) {
+    BTreeSet<int> s;
+    for (int i = 0; i < 50000; ++i) {
+        s.insert(i);
+    }
+    CHECK(s.validate());
+    for (int i = 49999; i >= 0; --i) {
+        CHECK_EQ(s.erase(i), size_t(1));
+        if (i % 5000 == 0) {
+            CHECK(s.validate());
+        }
+    }
+    CHECK(s.empty());
+    for (int i = 50000; i > 0; --i) {
+        s.insert(i);
+    }
+    CHECK(s.validate());
+    CHECK_EQ(s.rank(25000), size_t(24999));
+}
+
+YASL_TEST(btree_plus_move_only_values) {
+    mem::Tracking t;
+    {
+        struct MoveOnly {
+            explicit MoveOnly(int x)
+                : p(new int(x))
+            {
+            }
+            MoveOnly(MoveOnly&& o) noexcept
+                : p(o.p)
+            {
+                o.p = nullptr;
+            }
+            MoveOnly& operator=(MoveOnly&& o) noexcept {
+                delete p;
+                p = o.p;
+                o.p = nullptr;
+                return *this;
+            }
+            ~MoveOnly() {
+                delete p;
+            }
+            int* p;
+        };
+        BTreeMap<int, MoveOnly> m(&t);
+        for (int i = 0; i < 5000; ++i) {
+            m.try_emplace((i * 7919) % 5000, i);
+        }
+        CHECK(m.validate());
+        for (int i = 0; i < 5000; i += 3) {
+            m.erase(i);
+        }
+        CHECK(m.validate());
+        BTreeMap<int, MoveOnly> other = yasl::move(m);
+        CHECK(other.validate() && m.empty());
+        for (auto& [k, v] : other) {
+            CHECK(v.p != nullptr);
+            (void)k;
+        }
+    }
+    CHECK_EQ(t.stats().live(), size_t(0));
+}
+
+YASL_TEST(btree_plus_from_sorted_and_range) {
+    mem::Tracking t;
+    {
+        for (int n : {0, 1, 2, 31, 32, 33, 64, 1000, 12345}) {
+            std::vector<int> v(static_cast<size_t>(n));
+            for (int i = 0; i < n; ++i) {
+                v[size_t(i)] = i * 2;
+            }
+            auto s = BTreeSet<int>::from_sorted(v.begin(), v.end(), &t);
+            CHECK(s.validate());
+            CHECK_EQ(s.size(), size_t(n));
+            CHECK((std::vector<int>(s.begin(), s.end()) == v));
+            if (n > 0) {
+                CHECK_EQ(*s.kth(size_t(n) - 1), (n - 1) * 2);
+            }
+            // erase everything again: rebalancing must cope with the packed layout
+            for (int i = 0; i < n; ++i) {
+                CHECK_EQ(s.erase(i * 2), size_t(1));
+            }
+            CHECK(s.empty() && s.validate());
+        }
+        BTreeSet<int> s(&t);
+        for (int i = 0; i < 100; ++i) {
+            s.insert(i);
+        }
+        int sum = 0;
+        for (int x : s.range(10, 20)) {
+            sum += x;
+        }
+        CHECK_EQ(sum, 145);
+        CHECK(s.range(200, 300).begin() == s.range(200, 300).end());
+    }
+    CHECK_EQ(t.stats().live(), size_t(0));
+}
+
+YASL_TEST(btree_plus_split_join) {
+    mem::Tracking t;
+    {
+        BTreeSet<int> s(&t);
+        for (int i = 0; i < 5000; ++i) {
+            s.insert(i * 2);
+        }
+        BTreeSet<int> right;
+        s.split(3001, right);
+        CHECK_EQ(s.size(), size_t(1501));
+        CHECK_EQ(right.size(), size_t(3499));
+        CHECK_EQ(s.back(), 3000);
+        CHECK_EQ(right.front(), 3002);
+        CHECK(s.validate() && right.validate());
+        CHECK_EQ(right.resource(), static_cast<mem::Resource*>(&t));
+        s.join(right);
+        CHECK(right.empty() && right.validate());
+        CHECK_EQ(s.size(), size_t(5000));
+        CHECK(s.validate());
+        CHECK_EQ(*s.kth(2500), 5000);
+    }
+    CHECK_EQ(t.stats().live(), size_t(0));
+}
+
+YASL_TEST(btree_plus_string_keys_and_copy) {
+    mem::Tracking t;
+    {
+        BTreeMap<String, int> m(&t);
+        for (int i = 0; i < 3000; ++i) {
+            m[String("key") + String(std::to_string(i).c_str())] = i;
+        }
+        CHECK(m.validate());
+        auto copy = m;
+        CHECK(copy == m && copy.validate());
+        for (int i = 0; i < 3000; i += 2) {
+            m.erase(String("key") + String(std::to_string(i).c_str()));
+        }
+        CHECK(m.validate());
+        CHECK_EQ(m.size(), size_t(1500));
+        CHECK_EQ(copy.size(), size_t(3000));
+    }
+    CHECK_EQ(t.stats().live(), size_t(0));
+}
