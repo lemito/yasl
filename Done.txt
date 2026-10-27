@@ -23,3 +23,4 @@
 2026-10-27 7.1 Методы StringView/String (lines, split_whitespace, strip_*, count, replace_all, repeat, to_upper/lower, join, try_parse) — коммит "Add string helpers: lines, strip, join, try_parse"
 2026-10-27 6.2 Random (xoshiro256**) — коммит "Add Random"
 2026-10-27 6.3 env::var, env::args — коммит "Add env::var and env::args"
+2026-10-27 3.4 print/println/eprintln (3.3) + io::read_line() — коммит "Add io::read_line"

@@ -9,6 +9,7 @@
 #include <thread>
 #include <vector>
 
+#include <fcntl.h>
 #include <unistd.h>
 
 using namespace yasl;
@@ -249,4 +250,22 @@ YASL_TEST(locked_keeps_pieces_together) {
     }
     CHECK_EQ(lines, size_t(2000));
     ::unlink(path.c_str());
+}
+
+YASL_TEST(read_line_from_stdin) {
+    String path = temp_path("stdin");
+    io::write_file(path.view(), "first\nsecond\n");
+    int saved = ::dup(0);
+    int fd = ::open(path.c_str(), O_RDONLY);
+    ::dup2(fd, 0);
+    ::close(fd);
+    Optional<String> a = io::read_line();
+    Optional<String> b = io::read_line();
+    Optional<String> c = io::read_line();
+    ::dup2(saved, 0);
+    ::close(saved);
+    ::unlink(path.c_str());
+    CHECK_EQ(*a, "first");
+    CHECK_EQ(*b, "second");
+    CHECK(!c.has_value());
 }

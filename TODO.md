@@ -119,7 +119,7 @@
   Один вызов `format/println` = одна атомарная запись: форматировать во внутренний `ScratchOutput`, затем
   писать под `Mutex`. `operator<<` по-прежнему без блокировки, документировать. Добавить `io::Locked out = io::out().lock();`
   (Rust `stdout().lock()`). Тест: N потоков × M `println`, строки не перемешаны.
-- [ ] **3.4 `print/println/eprintln`** свободными функциями (Rust/Kotlin) + `io::read_line() -> Optional<String>`. P2.
+- [x] **3.4 `print/println/eprintln`** свободными функциями (Rust/Kotlin) + `io::read_line() -> Optional<String>`. P2.
 
 ## Фаза 4. Контейнеры — P0/P1
 

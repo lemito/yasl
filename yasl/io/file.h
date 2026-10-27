@@ -264,6 +264,15 @@ namespace yasl::io {
     SharedOutput& err();
     Input& in();
 
+    // One line from stdin without the newline, none at end of input.
+    inline Optional<String> read_line() {
+        String line;
+        if (!in().read_line(line)) {
+            return none;
+        }
+        return Optional<String>(yasl::move(line));
+    }
+
     String read_file(StringView path);
     void write_file(StringView path, StringView data);
 
