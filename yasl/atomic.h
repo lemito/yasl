@@ -28,6 +28,22 @@ namespace yasl {
             return n_.fetch_sub(1, std::memory_order_acq_rel) == 1;
         }
 
+        // Like unref() but always a real RMW: needed when try_ref() can race with the drop (weak pointers).
+        bool release() noexcept {
+            return n_.fetch_sub(1, std::memory_order_acq_rel) == 1;
+        }
+
+        // Increments unless the count is already zero; returns whether it did.
+        bool try_ref() noexcept {
+            size_t n = n_.load(std::memory_order_relaxed);
+            while (n != 0) {
+                if (n_.compare_exchange_weak(n, n + 1, std::memory_order_acq_rel, std::memory_order_relaxed)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         bool unique() const noexcept {
             return n_.load(std::memory_order_acquire) == 1;
         }

@@ -78,7 +78,7 @@
     `release()` (возвращает `T*`, владение — вызывающему, вместе с ресурсом: вернуть `Pair<T*, Resource*>`),
     `reset()`, `swap`, `==` с `nullptr`. Копирование запрещено.
   - Готово, когда: тесты на upcast с виртуальным деструктором, Tracking без утечек, `sizeof(Unique<T>) == 3*sizeof(void*)`.
-- [ ] **2.2 `Shared<T>` + `Weak<T>`** (shared_ptr/weak_ptr, Rust `Arc`/`Weak`). Файлы `yasl/ptr/shared.h`, `shared_test.cpp`.
+- [x] **2.2 `Shared<T>` + `Weak<T>`** (shared_ptr/weak_ptr, Rust `Arc`/`Weak`). Файлы `yasl/ptr/shared.h`, `shared_test.cpp`.
   - Одна аллокация: блок `{ RefCount strong; RefCount weak; Resource* res; void (*drop_value)(Block*); void (*free_block)(Block*); U value; }`.
     `Shared` хранит `T* p_` + `Block* b_` (2 слова) → разрешён upcast `Shared<Derived>` → `Shared<Base>`.
   - Слабые ссылки: `weak` = число Weak + 1 (за всех strong). При strong→0 разрушить значение, при weak→0 освободить блок.

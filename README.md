@@ -29,13 +29,13 @@ cd build && ctest                # тесты + проверка include-пол�
 
 | Модуль | Что внутри |
 |---|---|
-| `yasl/sys` | type traits и концепты на builtins, `move/forward/swap`, `Optional`, `Result`, `Pair`, `Span`, `Less`, алгоритмы, исключения, хеш, `Mutex` (pthread) |
+| `yasl/sys` | type traits и концепты на builtins, `move/forward/swap`, `Optional`, `Result`, `Function`, `defer`, `checked_*`, `sort`, `Pair`, `Span`, `Less`, алгоритмы, исключения, хеш, `Mutex` (pthread) |
 | `yasl/mem` | `Resource`, `Arena`, `InlineArena<N>`, `Pool`, `Tracking`, `Synchronized<R>` |
 | `yasl/vec` | `Vector<T>` |
 | `yasl/str` | `StringView`, `String` (copy-on-write), `StringBuilder`, `num` — числа ⇄ текст |
 | `yasl/io` | `Output`/`Input`, форматирование `format("{}")`, файлы, строковые потоки, `out()/err()/in()` |
 | `yasl/map` | `BTreeMap/BTreeSet`, `TreapMap/TreapSet`, `Trie<V>` |
-| `yasl/ptr` | `Arc<T>` |
+| `yasl/ptr` | `Unique<T>`, `Shared<T>` + `Weak<T>` (`Arc` — устаревший алиас) |
 | `yasl/compat` | мост к std: `mem::Allocator<T>`, pmr-адаптеры, `std::hash`, `std::formatter`, `std::ostream` |
 
 ## Память
@@ -149,7 +149,7 @@ String all = io::read_file("data.txt");
 
 ## Потокобезопасность
 
-`String` и `Arc` используют атомарный счётчик ссылок; копии можно свободно передавать между потоками.
+`String` и `Shared` используют атомарный счётчик ссылок; копии можно свободно передавать между потоками.
 Контейнеры, потоки и `Arena`/`Pool`/`Tracking` — однопоточные; для общего ресурса есть `Synchronized<R>`.
 
 ## Тесты
