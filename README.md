@@ -29,7 +29,7 @@ cd build && ctest                # тесты + проверка include-пол�
 
 | Модуль | Что внутри |
 |---|---|
-| `yasl/sys` | type traits и концепты на builtins, `move/forward/swap`, `Optional`, `Pair`, `Span`, `Less`, алгоритмы, исключения, хеш, `Mutex` (pthread) |
+| `yasl/sys` | type traits и концепты на builtins, `move/forward/swap`, `Optional`, `Result`, `Pair`, `Span`, `Less`, алгоритмы, исключения, хеш, `Mutex` (pthread) |
 | `yasl/mem` | `Resource`, `Arena`, `InlineArena<N>`, `Pool`, `Tracking`, `Synchronized<R>` |
 | `yasl/vec` | `Vector<T>` |
 | `yasl/str` | `StringView`, `String` (copy-on-write), `StringBuilder`, `num` — числа ⇄ текст |

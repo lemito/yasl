@@ -35,7 +35,7 @@
 
 ## Фаза 1. Базовые типы (`yasl/sys`) — P0
 
-- [ ] **1.1 `Result<T, E>`** (Rust `Result`, Kotlin `Result`). Файл `yasl/sys/result.h`.
+- [x] **1.1 `Result<T, E>`** (Rust `Result`, Kotlin `Result`). Файл `yasl/sys/result.h`.
   - Хранение: union + флаг, как в `yasl/sys/optional.h`. `Ok(v)` / `Err(e)` — фабрики-теги
     (`yasl::ok(v)`, `yasl::err(e)`), неявно конвертируются в любой `Result`.
   - API: `is_ok() is_err() explicit operator bool`, `value()` (бросает `BadAccess`), `operator* ->`,
