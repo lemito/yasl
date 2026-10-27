@@ -28,3 +28,4 @@
 2026-10-27 5.5 Atomic<T> с явными Order — коммит "Add Atomic<T>"
 2026-10-27 5.4 WaitGroup, Latch, ThreadPool, Future (TSan чисто) — коммит "Add WaitGroup, Latch, ThreadPool and Future"
 2026-10-27 1.7 Variant<Ts...> + match — коммит "Add Variant and match"
+2026-10-27 2.3 std::hash для Unique/Shared — коммит "Add std::hash for Unique and Shared"

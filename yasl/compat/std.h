@@ -3,6 +3,8 @@
 // Interop layer: this header is allowed to use the standard library.
 // Nothing in yasl includes it; include it yourself where yasl meets std code.
 
+#include <yasl/ptr/shared.h>
+#include <yasl/ptr/unique.h>
 #include <yasl/str/builder.h>
 #include <yasl/str/str.h>
 #include <yasl/str/view.h>
@@ -49,6 +51,22 @@ template <>
 struct std::hash<yasl::String> {
     size_t operator()(const yasl::String& s) const noexcept {
         return hash_value(s);
+    }
+};
+
+// Hash of the pointer, like std::unique_ptr / std::shared_ptr. There is deliberately no
+// conversion of Unique to std::unique_ptr: the allocators differ.
+template <class T>
+struct std::hash<yasl::Unique<T>> {
+    size_t operator()(const yasl::Unique<T>& p) const noexcept {
+        return std::hash<T*>()(p.get());
+    }
+};
+
+template <class T>
+struct std::hash<yasl::Shared<T>> {
+    size_t operator()(const yasl::Shared<T>& p) const noexcept {
+        return std::hash<T*>()(p.get());
     }
 };
 

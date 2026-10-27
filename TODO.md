@@ -89,7 +89,7 @@
   - `yasl/ptr/arc.h`: `template <class T> using Arc [[deprecated("use Shared")]] = Shared<T>;` + `make_arc` → `make_shared`.
     Перенести тесты из `arc_test.cpp` в `shared_test.cpp`, `String`-код, использующий `RefCount`, не трогать.
   - Готово, когда: тесты на циклы с Weak, `lock()` после смерти, многопоточный тест копирования/`lock` под TSan.
-- [ ] **2.3 Совместимость:** в `yasl/compat/std.h` — `std::hash` для `Unique/Shared`, `to_std(Unique&&)` не делать (разные аллокаторы). P2.
+- [x] **2.3 Совместимость:** в `yasl/compat/std.h` — `std::hash` для `Unique/Shared`, `to_std(Unique&&)` не делать (разные аллокаторы). P2.
 
 ## Фаза 3. Форматирование (`yasl/io`) — P1
 

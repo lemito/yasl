@@ -29,3 +29,14 @@ YASL_TEST(compat_std_interop) {
     b << std::string("from std");
     CHECK_EQ(b.view(), "from std"_sv);
 }
+
+YASL_TEST(compat_hash_smart_pointers) {
+    auto u = yasl::make_unique<int>(1);
+    CHECK_EQ(std::hash<yasl::Unique<int>>()(u), std::hash<int*>()(u.get()));
+    auto s = yasl::make_shared<int>(2);
+    auto s2 = s;
+    CHECK_EQ(std::hash<yasl::Shared<int>>()(s), std::hash<yasl::Shared<int>>()(s2));
+    std::unordered_map<yasl::Shared<int>, int> m;
+    m[s] = 5;
+    CHECK_EQ(m.at(s2), 5);
+}
