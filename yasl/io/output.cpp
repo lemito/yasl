@@ -151,107 +151,45 @@ namespace yasl::io {
         }
 
         namespace {
-            bool is_digit(char c) noexcept {
-                return c >= '0' && c <= '9';
-            }
-
-            uint32 parse_number(const char* p, size_t n, size_t& i) {
-                uint32 v = 0;
-                while (i < n && is_digit(p[i])) {
-                    v = v * 10 + uint32(p[i] - '0');
-                    if (v > 100000) {
-                        throw FormatError("yasl::format: number too large");
-                    }
-                    ++i;
-                }
-                return v;
-            }
-
-            bool is_align(char c) noexcept {
-                return c == '<' || c == '>' || c == '^';
-            }
-
-            FormatSpec parse_spec(const char* p, size_t n, size_t& i) {
-                FormatSpec spec;
-                if (i + 1 < n && is_align(p[i + 1]) && p[i] != '}') {
-                    spec.fill = p[i];
-                    spec.align = p[i + 1];
-                    i += 2;
-                } else if (i < n && is_align(p[i])) {
-                    spec.align = p[i++];
-                }
-                if (i < n && p[i] == '+') {
-                    spec.plus = true;
-                    ++i;
-                }
-                if (i < n && p[i] == '#') {
-                    spec.alt = true;
-                    ++i;
-                }
-                if (i < n && p[i] == '0') {
-                    spec.zero = true;
-                    ++i;
-                }
-                spec.width = parse_number(p, n, i);
-                if (i < n && p[i] == '.') {
-                    ++i;
-                    if (i == n || !is_digit(p[i])) {
+            [[noreturn]] void throw_format_error(FormatErr e) {
+                switch (e) {
+                    case FormatErr::UnmatchedBrace:
+                        throw FormatError("yasl::format: unmatched '}'");
+                    case FormatErr::MissingPrecision:
                         throw FormatError("yasl::format: missing precision");
-                    }
-                    spec.precision = int32(parse_number(p, n, i));
+                    case FormatErr::NumberTooLarge:
+                        throw FormatError("yasl::format: number too large");
+                    case FormatErr::NotEnoughArgs:
+                        throw FormatError("yasl::format: not enough arguments");
+                    default:
+                        throw FormatError("yasl::format: bad replacement field");
                 }
-                if (i < n && p[i] != '}') {
-                    spec.type = p[i++];
-                }
-                return spec;
             }
+
+            struct WriteVisitor {
+                Output& out;
+                const FormatArg* args;
+                size_t count;
+
+                void literal(const char* p, size_t n) {
+                    out.write(p, n);
+                }
+
+                FormatErr field(size_t index, const FormatSpec& spec) {
+                    if (index >= count) {
+                        return FormatErr::NotEnoughArgs;
+                    }
+                    args[index].fn(out, args[index].value, spec);
+                    return FormatErr::None;
+                }
+            };
         }
 
         void vformat(Output& out, StringView fmt, const FormatArg* args, size_t count) {
-            const char* p = fmt.data();
-            size_t n = fmt.size();
-            size_t next = 0;
-            size_t lit = 0;
-            size_t i = 0;
-            while (i < n) {
-                char c = p[i];
-                if (c != '{' && c != '}') {
-                    ++i;
-                    continue;
-                }
-                if (i + 1 < n && p[i + 1] == c) {
-                    out.write(p + lit, i + 1 - lit);
-                    i += 2;
-                    lit = i;
-                    continue;
-                }
-                if (c == '}') {
-                    throw FormatError("yasl::format: unmatched '}'");
-                }
-                out.write(p + lit, i - lit);
-                ++i;
-                size_t index = next;
-                if (i < n && is_digit(p[i])) {
-                    index = parse_number(p, n, i);
-                } else {
-                    ++next;
-                }
-                FormatSpec spec;
-                if (i < n && p[i] == ':') {
-                    ++i;
-                    spec = parse_spec(p, n, i);
-                }
-                if (i >= n || p[i] != '}') {
-                    throw FormatError("yasl::format: bad replacement field");
-                }
-                ++i;
-                lit = i;
-                if (index >= count) {
-                    throw FormatError("yasl::format: not enough arguments");
-                }
-                args[index].fn(out, args[index].value, spec);
+            WriteVisitor vis{out, args, count};
+            if (FormatErr e = walk_format(fmt.data(), fmt.size(), vis); e != FormatErr::None) {
+                throw_format_error(e);
             }
-            out.write(p + lit, n - lit);
         }
     }
 }

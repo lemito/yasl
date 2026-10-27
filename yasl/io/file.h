@@ -160,12 +160,12 @@ namespace yasl::io {
     void write_file(StringView path, StringView data);
 
     template <class... Args>
-    void print(StringView fmt, const Args&... args) {
+    void print(FormatString<TypeIdentity<Args>...> fmt, const Args&... args) {
         out().format(fmt, args...);
     }
 
     template <class... Args>
-    void println(StringView fmt, const Args&... args) {
+    void println(FormatString<TypeIdentity<Args>...> fmt, const Args&... args) {
         out().format(fmt, args...).put('\n');
     }
 }

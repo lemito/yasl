@@ -129,10 +129,19 @@ namespace yasl {
 
         template <class T>
         void implicit_convert(T) noexcept;
+
+        template <class T>
+        struct IdentityT {
+            using Type = T;
+        };
     }
 
     template <class T>
     using RemoveReference = typename detail::RemoveRefT<T>::Type;
+
+    // Makes a parameter a non-deduced context.
+    template <class T>
+    using TypeIdentity = typename detail::IdentityT<T>::Type;
 
     template <class T>
     using RemoveCV = typename detail::RemoveCVT<T>::Type;

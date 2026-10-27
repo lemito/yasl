@@ -56,9 +56,9 @@ YASL_TEST(format_basic) {
     CHECK_EQ(format("[{:>7}]", Temperature{21.55}), "[  21.6C]");
     CHECK(format("{}", static_cast<const void*>(nullptr)) == "0x0");
 
-    CHECK_THROWS(format("{", 1), FormatError);
-    CHECK_THROWS(format("}", 1), FormatError);
-    CHECK_THROWS(format("{} {}", 1), FormatError);
+    CHECK_THROWS(format(io::runtime_format("{"), 1), FormatError);
+    CHECK_THROWS(format(io::runtime_format("}"), 1), FormatError);
+    CHECK_THROWS(format(io::runtime_format("{} {}"), 1), FormatError);
 }
 
 YASL_TEST(output_misc) {

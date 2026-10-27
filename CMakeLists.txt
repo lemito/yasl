@@ -43,4 +43,7 @@ if(YASL_BUILD_TESTS)
     add_test(NAME yasl_tests COMMAND yasl_tests)
     add_test(NAME yasl_include_policy
         COMMAND ${CMAKE_COMMAND} -DROOT=${CMAKE_CURRENT_SOURCE_DIR} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_includes.cmake)
+    add_test(NAME yasl_format_compile_fail
+        COMMAND ${CMAKE_COMMAND} -DCXX=${CMAKE_CXX_COMPILER} -DROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_compile_fail.cmake)
 endif()

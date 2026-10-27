@@ -159,7 +159,9 @@ String all = io::read_file("data.txt");
 ```
 
 Форматирование: `{}`, `{0}`, `{:[[fill]align][+][#][0][width][.precision][type]}`,
-типы `d x X o b c f e s`. Свои типы — через `operator<<(io::Output&, const T&)`
+типы `d x X o b c f e s`. Строка-литерал проверяется **при компиляции** (скобки, число аргументов, индексы,
+буква типа для типа аргумента); строку, известную только в рантайме, передавайте через `io::runtime_format(s)`
+(ошибка тогда — `FormatError`). Свои типы — через `operator<<(io::Output&, const T&)`
 или `format_value(io::Output&, const T&, const io::FormatSpec&)` (находится по ADL).
 
 Числовые обёртки `yasl/io/fmt.h` (работают в потоках и внутри `format("{}")`):

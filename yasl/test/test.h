@@ -63,7 +63,8 @@ namespace yasl::test {
     do {                                                                                \
         if (auto yasl_msg_ = ::yasl::test::eq_failure((a), (b))) {                      \
             ::yasl::test::fail(__FILE__, __LINE__,                                      \
-                ::yasl::format("CHECK_EQ(" #a ", " #b "): {}", *yasl_msg_));            \
+                ::yasl::format("CHECK_EQ({}, {}): {}", ::yasl::StringView(#a),          \
+                    ::yasl::StringView(#b), *yasl_msg_));                               \
         }                                                                               \
     } while (0)
 

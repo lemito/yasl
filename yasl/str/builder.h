@@ -54,7 +54,7 @@ namespace yasl {
         }
 
         template <class... Args>
-        StringBuilder& format(StringView fmt, const Args&... args) {
+        StringBuilder& format(io::FormatString<TypeIdentity<Args>...> fmt, const Args&... args) {
             io::Output::format(fmt, args...);
             return *this;
         }
@@ -149,7 +149,7 @@ namespace yasl {
 
     // format() into a new String.
     template <class... Args>
-    String format(StringView fmt, const Args&... args) {
+    String format(io::FormatString<TypeIdentity<Args>...> fmt, const Args&... args) {
         StringBuilder b;
         b.format(fmt, args...);
         return b.take();
