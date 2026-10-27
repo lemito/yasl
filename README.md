@@ -128,6 +128,18 @@ String s = sb.take();      // без копирования
 String t = format("{}-{:03}", "x", 7);
 ```
 
+### Ленивые адаптеры (`yasl/sys/iter.h`)
+
+```cpp
+using namespace yasl::iter;
+auto r = v | filter([](int x) { return x % 2 == 0; }) | map([](int x) { return x * x; }) | collect<Vector>();
+int total = range(1, 101) | sum();
+for (auto [i, x] : v | enumerate()) ...
+```
+
+`map filter take skip enumerate zip reverse range` и терминальные `collect<C> sum count fold any all find`.
+Источник — lvalue-контейнер (временный контейнер отвергается при компиляции).
+
 ### Числа (`yasl/str/num.h`)
 
 Свои алгоритмы вместо `printf`/`strtod`/`to_chars`:
