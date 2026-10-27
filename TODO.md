@@ -179,7 +179,7 @@
 
 ## Фаза 6. Время, случайные числа, система — P1/P2
 
-- [ ] **6.1 `Duration`, `Instant`, `SystemTime`** (Go `time`, Rust `std::time`). Файл `yasl/sys/time.h` (`clock_gettime`, добавить `time.h` в ALLOWED).
+- [x] **6.1 `Duration`, `Instant`, `SystemTime`** (Go `time`, Rust `std::time`). Файл `yasl/sys/time.h` (`clock_gettime`, добавить `time.h` в ALLOWED).
   `Duration` — int64 наносекунд, литералы `5_ms`, `2_s`; форматирование `1.5s`, `250ms` (Go-стиль); `Instant::now()`, `elapsed()`. P1.
 - [ ] **6.2 `Random`** (`yasl/sys/random.h`): xoshiro256**, `seed_from_os()`, `next_u64`, `range(lo, hi)` без смещения
   (метод Лемира), `next_double`, `shuffle(Span)`. P2.

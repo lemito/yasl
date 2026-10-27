@@ -11,3 +11,4 @@
 2026-10-27 4.2 HashMap/HashSet (Swiss-подобная таблица, SWAR; sys/random.h добавлен в ALLOWED ради getrandom) — коммит "Add HashMap and HashSet"
 2026-10-27 3.1 Числовые обёртки fmt::* — коммит "Add fmt:: number wrappers"
 2026-10-27 3.2 Проверка строки формата при компиляции (consteval FormatString, io::runtime_format; ctest yasl_format_compile_fail; поправлен test.h) — коммит "Check format strings at compile time"
+2026-10-27 6.1 Duration, Instant, SystemTime (time.h добавлен в ALLOWED ради clock_gettime) — коммит "Add Duration, Instant and SystemTime"

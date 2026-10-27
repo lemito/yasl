@@ -2,12 +2,12 @@
 #
 # Allowed: language-support headers the compiler needs (<new>, <initializer_list>,
 # <compare>, <cstddef>, <cstdint>), <atomic>, and OS / C runtime headers.
-# sys/random.h: getrandom() for the per-process hash seed.
+# sys/random.h: getrandom() for the per-process hash seed; time.h: clock_gettime() for Instant.
 # yasl/compat/ (std interop), tests and the test runner are exempt.
 
 set(ALLOWED
     cstddef cstdint stddef.h stdint.h new initializer_list compare atomic
-    sys/types.h sys/stat.h sys/random.h unistd.h fcntl.h errno.h string.h stdlib.h pthread.h)
+    sys/types.h sys/stat.h sys/random.h time.h unistd.h fcntl.h errno.h string.h stdlib.h pthread.h)
 
 file(GLOB_RECURSE FILES "${ROOT}/yasl/*.h" "${ROOT}/yasl/*.cpp")
 set(BAD 0)
