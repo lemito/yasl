@@ -14,3 +14,4 @@
 2026-10-27 6.1 Duration, Instant, SystemTime (time.h добавлен в ALLOWED ради clock_gettime) — коммит "Add Duration, Instant and SystemTime"
 2026-10-27 5.1 Thread (+ this_thread; sched.h добавлен в ALLOWED; проверено под TSan) — коммит "Add Thread"
 2026-10-27 5.2 Guarded<T>, RwLock<T>, CondVar, Once/OnceLock/Lazy (TSan чисто) — коммит "Add Guarded, RwLock, CondVar, Once and Lazy"
+2026-10-27 3.3 Синхронизация io::out()/err() (SharedOutput, Locked, eprintln; TSan чисто) — коммит "Synchronize io::out() and io::err()"

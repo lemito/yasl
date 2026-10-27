@@ -203,17 +203,17 @@ namespace yasl::io {
         }
     }
 
-    Output& out() {
-        static Output* stream = [] {
-            Output* s = immortal<FileOutput>(File(1, false), FileOutput::kDefaultBuffer, mem::system_resource());
+    SharedOutput& out() {
+        static SharedOutput* stream = [] {
+            SharedOutput* s = immortal<SharedOutput>(File(1, false), FileOutput::kDefaultBuffer, mem::system_resource());
             ::atexit(flush_stdout);
             return s;
         }();
         return *stream;
     }
 
-    Output& err() {
-        static Output* stream = immortal<FileOutput>(File(2, false), 0, mem::system_resource());
+    SharedOutput& err() {
+        static SharedOutput* stream = immortal<SharedOutput>(File(2, false), 0, mem::system_resource());
         return *stream;
     }
 

@@ -6,6 +6,7 @@
 #include <yasl/mem/resource.h>
 #include <yasl/str/str.h>
 #include <yasl/sys/exception.h>
+#include <yasl/sys/mutex.h>
 
 namespace yasl::io {
     // I/O failure with the OS error code and a ready message ("open 'x': No such file or directory").
@@ -102,7 +103,7 @@ namespace yasl::io {
 
     // Buffered writer to a file. Flushes on destruction (errors there are swallowed;
     // call flush() explicitly to observe them).
-    class FileOutput final: public Output {
+    class FileOutput: public Output {
     public:
         static constexpr size_t kDefaultBuffer = 64 * 1024;
 
@@ -126,6 +127,113 @@ namespace yasl::io {
         char* buf_ = nullptr;
         size_t cap_ = 0;
     };
+
+    class SharedOutput;
+
+    // Holds a SharedOutput's lock for its lifetime, so a series of writes stays together:
+    //
+    //     io::Locked out = io::out().lock();
+    //     out << "a=" << a << ' ';
+    //     out << "b=" << b << '\n';       // no other thread's output in between
+    class Locked {
+    public:
+        Locked(const Locked&) = delete;
+        Locked& operator=(const Locked&) = delete;
+
+        Locked(Locked&& other) noexcept
+            : s_(yasl::exchange(other.s_, nullptr))
+        {
+        }
+
+        ~Locked();
+
+        template <class T>
+        Locked& operator<<(const T& v) {
+            stream() << v;
+            return *this;
+        }
+
+        template <class... Args>
+        Locked& format(FormatString<TypeIdentity<Args>...> fmt, const Args&... args) {
+            stream().Output::format(fmt, args...);
+            return *this;
+        }
+
+        void write(StringView s) {
+            stream().write(s);
+        }
+
+        void put(char c) {
+            stream().put(c);
+        }
+
+        void flush() {
+            stream().flush();
+        }
+
+    private:
+        friend class SharedOutput;
+
+        explicit Locked(SharedOutput* s) noexcept
+            : s_(s)
+        {
+        }
+
+        Output& stream() noexcept;
+
+        SharedOutput* s_;
+    };
+
+    // A FileOutput several threads may share: format() and println() build the whole text first
+    // and write it in one piece under a mutex, so lines from different threads never interleave.
+    // Plain operator<< and write() are NOT synchronized; use lock() around those.
+    class SharedOutput final: public FileOutput {
+    public:
+        using FileOutput::FileOutput;
+
+        template <class... Args>
+        SharedOutput& format(FormatString<TypeIdentity<Args>...> fmt, const Args&... args) {
+            detail::ScratchOutput text;
+            text.format(fmt, args...);
+            write_locked(text.view());
+            return *this;
+        }
+
+        template <class... Args>
+        SharedOutput& println(FormatString<TypeIdentity<Args>...> fmt, const Args&... args) {
+            detail::ScratchOutput text;
+            text.format(fmt, args...);
+            text.put('\n');
+            write_locked(text.view());
+            return *this;
+        }
+
+        // Writes s as one piece.
+        void write_locked(StringView s) {
+            LockGuard<Mutex> g(mutex_);
+            write(s);
+        }
+
+        Locked lock() {
+            mutex_.lock();
+            return Locked(this);
+        }
+
+    private:
+        friend class Locked;
+
+        Mutex mutex_;
+    };
+
+    inline Locked::~Locked() {
+        if (s_) {
+            s_->mutex_.unlock();
+        }
+    }
+
+    inline Output& Locked::stream() noexcept {
+        return *s_;
+    }
 
     // Buffered reader from a file.
     class FileInput final: public Input {
@@ -152,8 +260,8 @@ namespace yasl::io {
 
     // Process-wide standard streams. out() is buffered and flushed at exit and
     // before in() reads; err() is unbuffered. Not synchronized between threads.
-    Output& out();
-    Output& err();
+    SharedOutput& out();
+    SharedOutput& err();
     Input& in();
 
     String read_file(StringView path);
@@ -165,7 +273,12 @@ namespace yasl::io {
     }
 
     template <class... Args>
+    void eprintln(FormatString<TypeIdentity<Args>...> fmt, const Args&... args) {
+        err().println(fmt, args...);
+    }
+
+    template <class... Args>
     void println(FormatString<TypeIdentity<Args>...> fmt, const Args&... args) {
-        out().format(fmt, args...).put('\n');
+        out().println(fmt, args...);
     }
 }

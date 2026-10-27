@@ -4,6 +4,11 @@
 #include <yasl/str/builder.h>
 #include <yasl/test/test.h>
 
+#include <cstdio>
+#include <string>
+#include <thread>
+#include <vector>
+
 #include <unistd.h>
 
 using namespace yasl;
@@ -168,5 +173,80 @@ YASL_TEST(file_large_unbuffered_writes) {
     CHECK_EQ(back.size(), big.size() + 8);
     CHECK(back.starts_with("headzzz"));
     CHECK(back.ends_with("zzztail"));
+    ::unlink(path.c_str());
+}
+
+YASL_TEST(shared_output_lines_do_not_interleave) {
+    String path = temp_path("shared");
+    constexpr int kThreads = 6;
+    constexpr int kLines = 1500;
+    {
+        io::SharedOutput shared{StringView(path.view())};
+        std::vector<std::thread> threads;
+        for (int t = 0; t < kThreads; ++t) {
+            threads.emplace_back([&shared, t] {
+                for (int k = 0; k < kLines; ++k) {
+                    shared.println("thread={} line={} {:->40}", t, k, "end");
+                }
+            });
+        }
+        for (auto& th : threads) {
+            th.join();
+        }
+        shared.flush();
+    }
+    String all = io::read_file(path.view());
+    std::vector<int> seen(kThreads, 0);
+    size_t lines = 0;
+    for (StringView rest = all.view(); !rest.empty();) {
+        size_t nl = rest.find('\n');
+        CHECK(nl != StringView::npos);
+        StringView line = rest.first(nl);
+        rest = rest.drop_front(nl + 1);
+        int t = -1;
+        int k = -1;
+        char tail[64] = {};
+        // "thread=T line=K -----...-----end"
+        std::string s(line.data(), line.size());
+        CHECK(std::sscanf(s.c_str(), "thread=%d line=%d %63s", &t, &k, tail) == 3);
+        CHECK(t >= 0 && t < kThreads);
+        CHECK_EQ(k, seen[size_t(t)]);
+        CHECK_EQ(std::string(tail), std::string(37, '-') + "end");
+        ++seen[size_t(t)];
+        ++lines;
+    }
+    CHECK_EQ(lines, size_t(kThreads * kLines));
+    ::unlink(path.c_str());
+}
+
+YASL_TEST(locked_keeps_pieces_together) {
+    String path = temp_path("locked");
+    {
+        io::SharedOutput shared{StringView(path.view())};
+        std::vector<std::thread> threads;
+        for (int t = 0; t < 4; ++t) {
+            threads.emplace_back([&shared, t] {
+                for (int k = 0; k < 500; ++k) {
+                    io::Locked out = shared.lock();
+                    out << "[" << t << ":";
+                    out << k << "]\n";
+                }
+            });
+        }
+        for (auto& th : threads) {
+            th.join();
+        }
+        shared.flush();
+    }
+    String all = io::read_file(path.view());
+    size_t lines = 0;
+    for (StringView rest = all.view(); !rest.empty(); ++lines) {
+        size_t nl = rest.find('\n');
+        StringView line = rest.first(nl);
+        CHECK(line.starts_with('[') && line.ends_with(']'));
+        CHECK(line.find(':') != StringView::npos);
+        rest = rest.drop_front(nl + 1);
+    }
+    CHECK_EQ(lines, size_t(2000));
     ::unlink(path.c_str());
 }
