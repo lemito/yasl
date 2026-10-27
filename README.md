@@ -25,6 +25,15 @@ cd build && ctest                # тесты + проверка include-пол�
 ./build/yasl_tests btree         # только тесты, в имени которых есть "btree"
 ```
 
+Установка и использование из другого проекта:
+
+```sh
+cmake --install build --prefix /opt/yasl
+# CMakeLists.txt потребителя:
+#   find_package(yasl 0.1 REQUIRED)
+#   target_link_libraries(app PRIVATE yasl::yasl)
+```
+
 ## Структура
 
 | Модуль | Что внутри |

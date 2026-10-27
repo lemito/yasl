@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(yasl LANGUAGES CXX)
+project(yasl VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -15,7 +15,9 @@ list(FILTER YASL_SOURCES EXCLUDE REGEX "/yasl/test/")
 
 add_library(yasl STATIC ${YASL_SOURCES})
 add_library(yasl::yasl ALIAS yasl)
-target_include_directories(yasl PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+target_include_directories(yasl PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<INSTALL_INTERFACE:include>)
 target_compile_features(yasl PUBLIC cxx_std_20)
 target_link_libraries(yasl PUBLIC Threads::Threads)
 
@@ -29,6 +31,22 @@ if(YASL_SANITIZE)
     target_compile_options(yasl PUBLIC -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(yasl PUBLIC -fsanitize=address,undefined)
 endif()
+
+# Installation: find_package(yasl) then link yasl::yasl.
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+install(TARGETS yasl EXPORT yaslTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(DIRECTORY yasl DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+    PATTERN "test" EXCLUDE)
+install(EXPORT yaslTargets NAMESPACE yasl:: DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/yasl)
+configure_package_config_file(cmake/yaslConfig.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/yaslConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/yasl)
+write_basic_package_version_file(${CMAKE_CURRENT_BINARY_DIR}/yaslConfigVersion.cmake
+    VERSION ${PROJECT_VERSION} COMPATIBILITY SameMajorVersion)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/yaslConfig.cmake ${CMAKE_CURRENT_BINARY_DIR}/yaslConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/yasl)
 
 if(YASL_BUILD_TESTS)
     enable_testing()
