@@ -163,7 +163,7 @@
 - [x] **4.6 Kotlin/Rust-методы `Vector`:** `retain(pred)`, `remove_if`, `dedup()`, `sort()`, `sort_by_key`, `contains`,
   `index_of -> Optional<size_t>`, `first()/last() -> Optional<T&>`, `extend(range)`, `drain(range)`, `split_off(i)`,
   `chunks(n)`/`windows(n)` (возвращают `Span`). `Зависит от:` 1.2, 1.6. P1.
-- [ ] **4.7 `BitSet`/`BitVector`** (Java `BitSet`): `set/test/reset`, `count`, `find_first`, итерация по установленным битам. P2.
+- [x] **4.7 `BitSet`/`BitVector`** (Java `BitSet`): `set/test/reset`, `count`, `find_first`, итерация по установленным битам. P2.
 
 ## Фаза 5. Многопоточность (Go / Java / Rust) — P1
 
