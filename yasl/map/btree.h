@@ -1019,18 +1019,18 @@ namespace yasl {
                     }
                     return;
                 }
-                if (n->count + 1 >= kFanMin) {
+                if (n->count + 1u >= kFanMin) {
                     return;
                 }
                 Inner* p = n->parent;
                 uint32 pos = n->pos;
                 Inner* left = pos > 0 ? inner(p->kids[pos - 1]) : nullptr;
                 Inner* right = pos < p->count ? inner(p->kids[pos + 1]) : nullptr;
-                if (left && left->count + 1 > kFanMin) {
+                if (left && left->count + 1u > kFanMin) {
                     rotate_right(p, pos - 1);
                     return;
                 }
-                if (right && right->count + 1 > kFanMin) {
+                if (right && right->count + 1u > kFanMin) {
                     rotate_left(p, pos);
                     return;
                 }
@@ -1244,7 +1244,7 @@ namespace yasl {
                 return leaf_depth == depth;
             }
             Inner* in = inner(n);
-            if (in->count + 1 > kFan || (in == root_ ? in->count < 1 : in->count + 1 < kFanMin)) {
+            if (in->count + 1u > kFan || (in == root_ ? in->count < 1u : in->count + 1u < kFanMin)) {
                 return false;
             }
             for (uint32 j = 0; j < in->count; ++j) {

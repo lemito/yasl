@@ -7,15 +7,18 @@ namespace yasl::fmt {
             out << b.n << " B";
             return out;
         }
-        // Tenths of the unit, rounded to nearest, in exact integer arithmetic.
+        // Tenths of the unit n / 2^(10 * u), rounded to nearest, in 64-bit arithmetic.
+        auto tenths_in = [&](size_t u) {
+            uint64 whole = b.n >> (10 * u);
+            uint64 rest = b.n & ((uint64(1) << (10 * u)) - 1);
+            uint64 half = uint64(1) << (10 * u - 1);
+            // rest < 2^60, so rest * 10 fits into 64 bits
+            return whole * 10 + ((rest * 10 + half) >> (10 * u));
+        };
         size_t unit = 1;
         while (unit < 6 && (b.n >> (10 * (unit + 1))) != 0) {
             ++unit;
         }
-        auto tenths_in = [&](size_t u) {
-            unsigned __int128 scale = (unsigned __int128)1 << (10 * u);
-            return uint64((((unsigned __int128)b.n * 10) + scale / 2) / scale);
-        };
         uint64 tenths = tenths_in(unit);
         if (tenths >= 10240 && unit < 6) {
             ++unit;
