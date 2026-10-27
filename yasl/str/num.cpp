@@ -889,4 +889,40 @@ namespace yasl::num {
         out = bit_cast<float>(sign | uint32(decimal_to_bits(d, {24, -126, 127, 127})));
         return true;
     }
+
+    ParseErrorKind classify_parse_error(StringView text, bool floating, bool is_unsigned) noexcept {
+        if (text.empty()) {
+            return ParseErrorKind::Empty;
+        }
+        size_t i = 0;
+        if (text[0] == '+' || text[0] == '-') {
+            if (text[0] == '-' && is_unsigned) {
+                return ParseErrorKind::InvalidDigit;
+            }
+            i = 1;
+        }
+        auto digits = [&] {
+            size_t start = i;
+            while (i < text.size() && text[i] >= '0' && text[i] <= '9') {
+                ++i;
+            }
+            return i - start;
+        };
+        // Well-formed text that was still rejected does not fit.
+        bool ok = digits() > 0;
+        if (ok && floating) {
+            if (i < text.size() && text[i] == '.') {
+                ++i;
+                digits();
+            }
+            if (i < text.size() && (text[i] == 'e' || text[i] == 'E')) {
+                ++i;
+                if (i < text.size() && (text[i] == '+' || text[i] == '-')) {
+                    ++i;
+                }
+                ok = digits() > 0;
+            }
+        }
+        return ok && i == text.size() ? ParseErrorKind::Overflow : ParseErrorKind::InvalidDigit;
+    }
 }

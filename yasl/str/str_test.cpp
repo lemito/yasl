@@ -260,3 +260,71 @@ YASL_TEST(builder_large_and_arena) {
     CHECK_EQ(big.size(), size_t(5002));
     CHECK_EQ(to_string(12.5), "12.5");
 }
+
+YASL_TEST(view_lines_and_words) {
+    auto collect = [](auto range) {
+        std::vector<std::string> out;
+        for (StringView part : range) {
+            out.emplace_back(part.data(), part.size());
+        }
+        return out;
+    };
+    using V = std::vector<std::string>;
+    CHECK((collect(StringView("a\nb\r\nc").lines()) == V{"a", "b", "c"}));
+    CHECK((collect(StringView("a\nb\n").lines()) == V{"a", "b"}));
+    CHECK((collect(StringView("\n\nx").lines()) == V{"", "", "x"}));
+    CHECK((collect(StringView("").lines()) == V{}));
+    CHECK((collect(StringView("  one  two\tthree\n four ").split_whitespace()) == V{"one", "two", "three", "four"}));
+    CHECK((collect(StringView("   ").split_whitespace()) == V{}));
+    CHECK((collect(StringView("solo").split_whitespace()) == V{"solo"}));
+}
+
+YASL_TEST(view_strip_count) {
+    StringView v = "prefix-body-suffix";
+    CHECK_EQ(*v.strip_prefix("prefix-"), "body-suffix");
+    CHECK(!v.strip_prefix("nope").has_value());
+    CHECK_EQ(*v.strip_suffix("-suffix"), "prefix-body");
+    CHECK_EQ(*v.strip_suffix('x'), "prefix-body-suffi");
+    CHECK_EQ(*v.strip_prefix('p'), "refix-body-suffix");
+    CHECK_EQ(StringView("abababa").count("aba"), size_t(2));
+    CHECK_EQ(StringView("a,b,,c").count(','), size_t(3));
+    CHECK_EQ(StringView("abc").count(""), size_t(0));
+}
+
+YASL_TEST(string_replace_repeat_case_join) {
+    CHECK_EQ(replace_all("a-b-c", "-", "+"), "a+b+c");
+    CHECK_EQ(replace_all("aaaa", "aa", "b"), "bb");
+    CHECK_EQ(replace_all("abc", "", "x"), "abc");
+    CHECK_EQ(replace_all("abc", "abc", ""), "");
+    CHECK_EQ(repeat("ab", 3), "ababab");
+    CHECK_EQ(repeat("ab", 0), "");
+    CHECK_EQ(to_upper("Hello, World 1"), "HELLO, WORLD 1");
+    CHECK_EQ(to_lower("Hello, World 1"), "hello, world 1");
+    String s = "MiXed";
+    CHECK_EQ(s.to_lower(), "mixed");
+    CHECK_EQ(s.to_upper(), "MIXED");
+    CHECK_EQ(s.repeat(2), "MiXedMiXed");
+    CHECK_EQ(s.replace_all("X", "x"), "Mixed");
+    std::vector<std::string> names = {"ann", "bob", "cy"};
+    CHECK_EQ(join(", ", names), "ann, bob, cy");
+    std::vector<std::string> none;
+    CHECK_EQ(join(",", none), "");
+    CHECK_EQ(join("-", std::vector<std::string>{"solo"}), "solo");
+}
+
+YASL_TEST(view_try_parse) {
+    CHECK_EQ(*StringView("42").try_parse<int>(), 42);
+    CHECK_EQ(*StringView("-7").try_parse<int64>(), int64(-7));
+    CHECK_EQ(*StringView("2.5").try_parse<double>(), 2.5);
+    CHECK(StringView("").try_parse<int>().error().kind() == ParseErrorKind::Empty);
+    CHECK(StringView("12x").try_parse<int>().error().kind() == ParseErrorKind::InvalidDigit);
+    CHECK(StringView("-").try_parse<int>().error().kind() == ParseErrorKind::InvalidDigit);
+    CHECK(StringView("-5").try_parse<unsigned>().error().kind() == ParseErrorKind::InvalidDigit);
+    CHECK(StringView("300").try_parse<uint8>().error().kind() == ParseErrorKind::Overflow);
+    CHECK(StringView("99999999999999999999").try_parse<int64>().error().kind() == ParseErrorKind::Overflow);
+    CHECK(StringView("1.5.2").try_parse<double>().error().kind() == ParseErrorKind::InvalidDigit);
+    auto r = StringView("abc").try_parse<int>();
+    CHECK(r.is_err());
+    CHECK(StringView(r.error().what()).contains("invalid"));
+    CHECK_EQ(StringView("5").parse<int>().value_or(0), 5);
+}

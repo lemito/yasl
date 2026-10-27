@@ -113,6 +113,12 @@ b.set(0, 'S');             // копирование только сейчас; 
 for (StringView part : "a,b,,c"_sv.split(',')) { ... }
 auto kv = "k = v"_sv.split_once('=');      // Optional<Pair<StringView, StringView>>
 Optional<int> n = "42"_sv.parse<int>();
+Result<int, ParseError> r = "4x"_sv.try_parse<int>();   // r.error().kind() == ParseErrorKind::InvalidDigit
+
+for (StringView line : text.lines()) { ... }            // без пустого хвоста, \r\n -> \n
+for (StringView w : text.split_whitespace()) { ... }
+"pre-x"_sv.strip_prefix("pre-");                          // Optional<StringView>
+String u = to_upper("abc");  replace_all(s, "a", "b");  repeat("ab", 3);  join(", ", names);
 
 StringBuilder sb;          // это io::Output, пишет прямо в буфер String
 sb << "id=" << 42 << ' ' << 0.1;

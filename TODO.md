@@ -189,7 +189,7 @@
 
 ## Фаза 7. Строки и итерация — P1
 
-- [ ] **7.1 Недостающие методы `StringView`/`String`** (Kotlin/C#/Rust). Сначала проверить, что уже есть в
+- [x] **7.1 Недостающие методы `StringView`/`String`** (Kotlin/C#/Rust). Сначала проверить, что уже есть в
   `yasl/str/view.h`, `yasl/str/str.h`; добавить отсутствующее из списка: `lines()`, `split_whitespace()`,
   `replace(from, to)`, `repeat(n)`, `to_upper/to_lower` (ASCII), `strip_prefix/strip_suffix -> Optional<StringView>`,
   `contains`, `count(sub)`, `join(sep, range)` (свободная функция), `parse<T>() -> Result<T, ParseError>` (рядом с существующим Optional-вариантом).

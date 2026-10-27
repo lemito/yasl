@@ -257,6 +257,12 @@ namespace yasl {
         // Replaces [pos, pos + n) with s. `s` may point into this string.
         String& replace(size_t pos, size_t n, StringView s);
 
+        // New strings in this string's resource; see the free functions of the same names.
+        String replace_all(StringView from, StringView to) const;
+        String repeat(size_t n) const;
+        String to_upper() const;
+        String to_lower() const;
+
         // Grows the string by n bytes and returns a pointer to them. The bytes are
         // uninitialized - the caller must fill them before reading.
         char* append_uninitialized(size_t n) {
@@ -382,6 +388,95 @@ namespace yasl {
         Rep* rep_ = nullptr;
         mem::Resource* res_;
     };
+
+    // Text utilities that build new strings.
+
+    // Every `from` in `text` replaced by `to` (non-overlapping, left to right).
+    inline String replace_all(StringView text, StringView from, StringView to, mem::Resource* res = mem::default_resource()) {
+        String out(res);
+        if (from.empty()) {
+            out.append(text);
+            return out;
+        }
+        size_t pos = 0;
+        for (size_t i = text.find(from); i != StringView::npos; i = text.find(from, pos)) {
+            out.append(text.substr(pos, i - pos));
+            out.append(to);
+            pos = i + from.size();
+        }
+        out.append(text.substr(pos));
+        return out;
+    }
+
+    inline String repeat(StringView text, size_t n, mem::Resource* res = mem::default_resource()) {
+        String out(res);
+        if (n != 0 && text.size() > max_value<size_t>() / n) {
+            throw LengthError("yasl::repeat: too long");
+        }
+        out.reserve(text.size() * n);
+        for (size_t i = 0; i < n; ++i) {
+            out.append(text);
+        }
+        return out;
+    }
+
+    // ASCII case conversion; other bytes are left alone.
+    inline String to_upper(StringView text, mem::Resource* res = mem::default_resource()) {
+        String out(res);
+        char* p = out.append_uninitialized(text.size());
+        for (size_t i = 0; i < text.size(); ++i) {
+            char c = text[i];
+            p[i] = (c >= 'a' && c <= 'z') ? char(c - 'a' + 'A') : c;
+        }
+        return out;
+    }
+
+    inline String to_lower(StringView text, mem::Resource* res = mem::default_resource()) {
+        String out(res);
+        char* p = out.append_uninitialized(text.size());
+        for (size_t i = 0; i < text.size(); ++i) {
+            char c = text[i];
+            p[i] = (c >= 'A' && c <= 'Z') ? char(c - 'A' + 'a') : c;
+        }
+        return out;
+    }
+
+    // The elements of a range (anything convertible to StringView) separated by `sep`.
+    //
+    //     join(", ", names)      // "ann, bob, cy"
+    template <class R>
+        requires requires(const R& r) {
+            r.begin();
+            r.end();
+        }
+    String join(StringView sep, const R& range, mem::Resource* res = mem::default_resource()) {
+        String out(res);
+        bool first = true;
+        for (const auto& item : range) {
+            if (!first) {
+                out.append(sep);
+            }
+            first = false;
+            out.append(StringView(item));
+        }
+        return out;
+    }
+
+    inline String String::replace_all(StringView from, StringView to) const {
+        return yasl::replace_all(view(), from, to, res_);
+    }
+
+    inline String String::repeat(size_t n) const {
+        return yasl::repeat(view(), n, res_);
+    }
+
+    inline String String::to_upper() const {
+        return yasl::to_upper(view(), res_);
+    }
+
+    inline String String::to_lower() const {
+        return yasl::to_lower(view(), res_);
+    }
 
     namespace literals {
         inline String operator""_s(const char* s, size_t n) {

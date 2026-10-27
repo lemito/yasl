@@ -36,6 +36,9 @@ namespace yasl::num {
     // Parses all of `text` ([+-]digits). False on bad syntax or overflow.
     bool parse_uint64(StringView text, uint64& magnitude, bool& negative, uint32 base = 10) noexcept;
 
+    // Why parse_uint64 / parse_double rejected `text`.
+    ParseErrorKind classify_parse_error(StringView text, bool floating, bool is_unsigned) noexcept;
+
     // Parses all of `text`: [+-]digits[.digits][(e|E)[+-]digits], inf, infinity, nan.
     bool parse_double(StringView text, double& out) noexcept;
     bool parse_float(StringView text, float& out) noexcept;
@@ -84,5 +87,15 @@ namespace yasl {
             return none;
         }
         return value;
+    }
+
+    template <class T>
+        requires(Arithmetic<T> && !SameAs<T, bool>)
+    Result<T, ParseError> StringView::try_parse() const noexcept {
+        T value{};
+        if (!num::parse(*this, value)) {
+            return err(ParseError(num::classify_parse_error(*this, FloatingPoint<T>, UnsignedIntegral<T>)));
+        }
+        return ok(value);
     }
 }

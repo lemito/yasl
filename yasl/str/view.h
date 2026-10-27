@@ -9,6 +9,44 @@
 
 namespace yasl {
     class SplitRange;
+    class LinesRange;
+    class WordsRange;
+
+    enum class ParseErrorKind : uint8 {
+        Empty,        // nothing to parse
+        InvalidDigit, // a character that does not belong to a number
+        Overflow,     // well-formed, but does not fit into the type
+    };
+
+    // Why StringView::try_parse failed.
+    class ParseError {
+    public:
+        constexpr explicit ParseError(ParseErrorKind kind) noexcept
+            : kind_(kind)
+        {
+        }
+
+        constexpr ParseErrorKind kind() const noexcept {
+            return kind_;
+        }
+
+        constexpr const char* what() const noexcept {
+            switch (kind_) {
+                case ParseErrorKind::Empty:
+                    return "cannot parse a number from an empty string";
+                case ParseErrorKind::InvalidDigit:
+                    return "invalid character in number";
+                case ParseErrorKind::Overflow:
+                    return "number does not fit into the type";
+            }
+            return "";
+        }
+
+        friend constexpr bool operator==(ParseError, ParseError) noexcept = default;
+
+    private:
+        ParseErrorKind kind_;
+    };
 
     // Non-owning view of a char range.
     //
@@ -272,6 +310,61 @@ namespace yasl {
             return rsplit_once(char_view(sep));
         }
 
+        // The text after / before `prefix` / `suffix`, none if it does not start / end with it.
+        Optional<StringView> strip_prefix(StringView prefix) const noexcept {
+            if (!starts_with(prefix)) {
+                return none;
+            }
+            return drop_front(prefix.size());
+        }
+
+        Optional<StringView> strip_prefix(char c) const noexcept {
+            if (!starts_with(c)) {
+                return none;
+            }
+            return drop_front(1);
+        }
+
+        Optional<StringView> strip_suffix(StringView suffix) const noexcept {
+            if (!ends_with(suffix)) {
+                return none;
+            }
+            return drop_back(suffix.size());
+        }
+
+        Optional<StringView> strip_suffix(char c) const noexcept {
+            if (!ends_with(c)) {
+                return none;
+            }
+            return drop_back(1);
+        }
+
+        // Number of non-overlapping occurrences (0 for an empty `sub`).
+        constexpr size_t count(StringView sub) const noexcept {
+            size_t n = 0;
+            if (sub.empty()) {
+                return 0;
+            }
+            for (size_t i = find(sub); i != npos; i = find(sub, i + sub.size())) {
+                ++n;
+            }
+            return n;
+        }
+
+        constexpr size_t count(char c) const noexcept {
+            size_t n = 0;
+            for (char x : *this) {
+                n += x == c ? 1 : 0;
+            }
+            return n;
+        }
+
+        // Lines split at '\n', a trailing '\r' dropped; no empty piece after a final newline.
+        constexpr LinesRange lines() const noexcept;
+
+        // Words separated by runs of ASCII whitespace; never yields an empty piece.
+        constexpr WordsRange split_whitespace() const noexcept;
+
         // Lazy split: for (StringView part : line.split(',')) ...
         // "a,,b" yields "a", "", "b"; an empty string yields one empty piece.
         constexpr SplitRange split(StringView sep) const noexcept;
@@ -281,6 +374,11 @@ namespace yasl {
         template <class T>
             requires(Arithmetic<T> && !SameAs<T, bool>)
         Optional<T> parse() const noexcept;
+
+        // Same, but says what was wrong. Defined in num.h.
+        template <class T>
+            requires(Arithmetic<T> && !SameAs<T, bool>)
+        Result<T, ParseError> try_parse() const noexcept;
 
         // Comparison
 
@@ -402,6 +500,150 @@ namespace yasl {
         StringView text_;
         StringView sep_;
     };
+
+    class LinesRange {
+    public:
+        class iterator {
+        public:
+            using value_type = StringView;
+            using difference_type = ptrdiff_t;
+
+            constexpr iterator() noexcept = default;
+
+            explicit constexpr iterator(StringView text) noexcept
+                : rest_(text)
+            {
+                advance();
+            }
+
+            constexpr StringView operator*() const noexcept {
+                return cur_;
+            }
+
+            constexpr iterator& operator++() noexcept {
+                advance();
+                return *this;
+            }
+
+            friend constexpr bool operator==(const iterator& it, DefaultSentinel) noexcept {
+                return it.done_;
+            }
+
+        private:
+            constexpr void advance() noexcept {
+                if (rest_.empty()) {
+                    done_ = true;
+                    return;
+                }
+                size_t i = rest_.find('\n');
+                if (i == StringView::npos) {
+                    cur_ = rest_;
+                    rest_ = {};
+                } else {
+                    cur_ = rest_.first(i);
+                    rest_ = rest_.drop_front(i + 1);
+                }
+                if (cur_.ends_with('\r')) {
+                    cur_ = cur_.drop_back(1);
+                }
+            }
+
+            StringView rest_;
+            StringView cur_;
+            bool done_ = false;
+        };
+
+        explicit constexpr LinesRange(StringView text) noexcept
+            : text_(text)
+        {
+        }
+
+        constexpr iterator begin() const noexcept {
+            return iterator(text_);
+        }
+
+        constexpr DefaultSentinel end() const noexcept {
+            return {};
+        }
+
+    private:
+        StringView text_;
+    };
+
+    class WordsRange {
+    public:
+        class iterator {
+        public:
+            using value_type = StringView;
+            using difference_type = ptrdiff_t;
+
+            constexpr iterator() noexcept = default;
+
+            explicit constexpr iterator(StringView text) noexcept
+                : rest_(text)
+            {
+                advance();
+            }
+
+            constexpr StringView operator*() const noexcept {
+                return cur_;
+            }
+
+            constexpr iterator& operator++() noexcept {
+                advance();
+                return *this;
+            }
+
+            friend constexpr bool operator==(const iterator& it, DefaultSentinel) noexcept {
+                return it.done_;
+            }
+
+        private:
+            constexpr void advance() noexcept {
+                rest_ = rest_.trim_left();
+                if (rest_.empty()) {
+                    done_ = true;
+                    return;
+                }
+                size_t i = rest_.find_first_of(StringView::kWhitespace);
+                if (i == StringView::npos) {
+                    cur_ = rest_;
+                    rest_ = {};
+                } else {
+                    cur_ = rest_.first(i);
+                    rest_ = rest_.drop_front(i);
+                }
+            }
+
+            StringView rest_;
+            StringView cur_;
+            bool done_ = false;
+        };
+
+        explicit constexpr WordsRange(StringView text) noexcept
+            : text_(text)
+        {
+        }
+
+        constexpr iterator begin() const noexcept {
+            return iterator(text_);
+        }
+
+        constexpr DefaultSentinel end() const noexcept {
+            return {};
+        }
+
+    private:
+        StringView text_;
+    };
+
+    constexpr LinesRange StringView::lines() const noexcept {
+        return LinesRange(*this);
+    }
+
+    constexpr WordsRange StringView::split_whitespace() const noexcept {
+        return WordsRange(*this);
+    }
 
     constexpr SplitRange StringView::split(StringView sep) const noexcept {
         return {*this, sep};
