@@ -45,7 +45,7 @@
     + `YASL_TRY_VOID(expr)`.
   - Тип ошибки по умолчанию для io: `io::Error` (уже есть в `io/file.h`) — проверьте, что он копируемый.
   - Готово, когда: тесты на ok/err, move-only `T`, нетривиальные деструкторы (Tracking), `YASL_TRY` в цепочке.
-- [ ] **1.2 Комбинаторы `Optional`** (Rust `Option`, Kotlin `?.`/`?:`). Файл `yasl/sys/optional.h`.
+- [x] **1.2 Комбинаторы `Optional`** (Rust `Option`, Kotlin `?.`/`?:`). Файл `yasl/sys/optional.h`.
   `map`, `and_then`, `or_else`, `filter`, `take()` (забрать и обнулить), `ok_or(e) -> Result`,
   `value_or_else(f)`, `Optional<T&>` (специализация: хранит указатель). `Зависит от:` 1.1 (для `ok_or`).
 - [ ] **1.3 `Function<Sig>` и `FunctionRef<Sig>`.** Файл `yasl/sys/function.h`.
