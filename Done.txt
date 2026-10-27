@@ -8,3 +8,4 @@
 2026-10-27 2.1 Unique<T> — коммит "Add Unique<T>"
 2026-10-27 2.2 Shared<T> + Weak<T> (Arc — алиас; проверено под TSan) — коммит "Add Shared and Weak, deprecate Arc"
 2026-10-27 4.1 BTree → B+-дерево (kth/rank, from_sorted, range, split/join за O(n)) — коммит "Rewrite BTree as B+ tree with subtree sizes"
+2026-10-27 4.2 HashMap/HashSet (Swiss-подобная таблица, SWAR; sys/random.h добавлен в ALLOWED ради getrandom) — коммит "Add HashMap and HashSet"

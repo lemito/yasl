@@ -41,4 +41,32 @@ namespace yasl {
             }
         }
     };
+
+    // String literals hash like the String / StringView with the same text.
+    template <size_t N>
+    struct Hash<char[N]> {
+        uint64 operator()(const char (&s)[N]) const noexcept {
+            size_t n = 0;
+            while (n < N && s[n] != '\0') {
+                ++n;
+            }
+            return hash_bytes(s, n);
+        }
+    };
+
+    // Transparent hasher / equality for heterogeneous lookup: String and StringView
+    // hash alike, so map.get("key"_sv) needs no temporary String.
+    struct HashAny {
+        template <class Q>
+        uint64 operator()(const Q& v) const noexcept {
+            return Hash<Q>{}(v);
+        }
+    };
+
+    struct EqualTo {
+        template <class A, class B>
+        constexpr bool operator()(const A& a, const B& b) const noexcept(noexcept(a == b)) {
+            return a == b;
+        }
+    };
 }

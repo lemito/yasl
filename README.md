@@ -34,7 +34,7 @@ cd build && ctest                # тесты + проверка include-пол�
 | `yasl/vec` | `Vector<T>` |
 | `yasl/str` | `StringView`, `String` (copy-on-write), `StringBuilder`, `num` — числа ⇄ текст |
 | `yasl/io` | `Output`/`Input`, форматирование `format("{}")`, файлы, строковые потоки, `out()/err()/in()` |
-| `yasl/map` | `BTreeMap/BTreeSet`, `TreapMap/TreapSet`, `Trie<V>` |
+| `yasl/map` | `HashMap/HashSet` (`hash_map.h`), `BTreeMap/BTreeSet`, `TreapMap/TreapSet`, `Trie<V>` |
 | `yasl/ptr` | `Unique<T>`, `Shared<T>` + `Weak<T>` (`Arc` — устаревший алиас) |
 | `yasl/compat` | мост к std: `mem::Allocator<T>`, pmr-адаптеры, `std::hash`, `std::formatter`, `std::ostream` |
 
@@ -88,6 +88,19 @@ for (auto& [k, v] : m) { ... }
 TreapMap<int, int> t;
 t.kth(10); t.rank(42);
 TreapMap<int, int> tail; t.split(100, tail);
+```
+
+### HashMap / HashSet
+
+`#include <yasl/map/hash_map.h>`. Открытая адресация в стиле Swiss table (control-байты, группы по 8 через SWAR,
+максимальная загрузка 7/8), одна аллокация на таблицу, хеш смешивается со случайным seed процесса (HashDoS).
+Порядка нет, итераторы инвалидируются при rehash. API как у `MapOps`/`SetOps` плюс `reserve`, `load_factor`,
+`erase_if(pred)`, `retain(pred)`; поиск гетерогенный: `m.get("k"_sv)`.
+
+```cpp
+HashMap<String, int> counts;
+counts["x"] += 1;
+counts.retain([](auto& e) { return e.value > 1; });
 ```
 
 ### Строки

@@ -145,7 +145,7 @@
     тесты против `std::map` (10⁵ операций insert/erase/lower_bound/kth/rank, разные `kCap` через маленькие и большие `T`),
     тест move-only значения, тест на `Tracking` (ноль утечек), `README.md` (таблица «Два Map») обновлена:
     теперь kth/rank есть у обоих.
-- [ ] **4.2 `HashMap<K,V>` / `HashSet<K>`** (главный пробел относительно Go/Rust/Java). P0. Файл `yasl/map/hash_map.h`.
+- [x] **4.2 `HashMap<K,V>` / `HashSet<K>`** (главный пробел относительно Go/Rust/Java). P0. Файл `yasl/map/hash_map.h`.
   - Открытая адресация, Swiss-table-подобная схема: массив control-байт (7 бит хеша + empty/deleted) и массив слотов,
     группы по 8/16 байт, сравнение группы через SWAR на `uint64` (без SIMD-интринсиков, переносимо).
     Если SWAR сложно — сначала линейное пробирование с Robin Hood, но API тот же.
