@@ -48,7 +48,7 @@
 - [x] **1.2 Комбинаторы `Optional`** (Rust `Option`, Kotlin `?.`/`?:`). Файл `yasl/sys/optional.h`.
   `map`, `and_then`, `or_else`, `filter`, `take()` (забрать и обнулить), `ok_or(e) -> Result`,
   `value_or_else(f)`, `Optional<T&>` (специализация: хранит указатель). `Зависит от:` 1.1 (для `ok_or`).
-- [ ] **1.3 `Function<Sig>` и `FunctionRef<Sig>`.** Файл `yasl/sys/function.h`.
+- [x] **1.3 `Function<Sig>` и `FunctionRef<Sig>`.** Файл `yasl/sys/function.h`.
   - `FunctionRef` — невладеющая (указатель на объект + thunk), для параметров-колбэков.
   - `Function` — владеющая, small-buffer 2–3 указателя, иначе аллокация через `mem::Resource`;
     поддержка move-only лямбд (как `std::move_only_function`), копирование запрещено.
