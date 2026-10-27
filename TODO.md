@@ -167,7 +167,7 @@
 
 ## Фаза 5. Многопоточность (Go / Java / Rust) — P1
 
-- [ ] **5.1 `Thread`** (`yasl/sys/thread.h`, pthread): запуск с `Function<void()>`, `join()`, деструктор делает join
+- [x] **5.1 `Thread`** (`yasl/sys/thread.h`, pthread): запуск с `Function<void()>`, `join()`, деструктор делает join
   (как `std::jthread`), `this_thread::sleep_for(Duration)`, `this_thread::yield()`. `Зависит от:` 1.3, 6.1.
 - [ ] **5.2 `Guarded<T>`** (Rust `Mutex<T>`): данные доступны только через `auto g = m.lock(); g->...`.
   Плюс `RwLock<T>` (pthread_rwlock), `CondVar` (pthread_cond), `Once` / `Lazy<T>` (C# `Lazy`, Rust `OnceLock`).
