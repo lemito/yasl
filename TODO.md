@@ -59,7 +59,7 @@
   `checked_add/sub/mul -> Optional<T>` (через `__builtin_add_overflow`), `saturating_add/sub/mul`,
   `narrow<T>(x) -> Optional<T>` (C# `checked` cast), `div_ceil`, `is_pow2`, `popcount`, `countr_zero`.
   Перенести битовые утилиты из `utility.h` сюда, оставив `#include` для совместимости. `(независимо)`
-- [ ] **1.6 Сортировка и алгоритмы** (в std нет сортировки без `<algorithm>`). Файл `yasl/sys/algo.h`:
+- [x] **1.6 Сортировка и алгоритмы** (в std нет сортировки без `<algorithm>`). Файл `yasl/sys/algo.h`:
   `sort` (introsort: quicksort median-of-3 + heapsort fallback + insertion < 16), `stable_sort` (merge,
   буфер из `mem::Resource`), `sort_by_key(first, last, key_fn)`, `binary_search -> Optional<size_t>`,
   `partition`, `nth_element`, `min_element/max_element`, `any_of/all_of/none_of`, `find_if`, `count_if`.
