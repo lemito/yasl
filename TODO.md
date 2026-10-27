@@ -55,7 +55,7 @@
   - Готово, когда: тесты SBO/heap, move-only захваты, отсутствие утечек.
 - [x] **1.4 `defer` / `ScopeExit`** (Go `defer`). Файл `yasl/sys/defer.h`:
   `auto g = scope_exit([&]{...}); g.dismiss();` и макрос `YASL_DEFER { ... };`. `(независимо)`
-- [ ] **1.5 Проверенная арифметика** (Rust `checked_*`, `saturating_*`, `wrapping_*`). Файл `yasl/sys/math.h`:
+- [x] **1.5 Проверенная арифметика** (Rust `checked_*`, `saturating_*`, `wrapping_*`). Файл `yasl/sys/math.h`:
   `checked_add/sub/mul -> Optional<T>` (через `__builtin_add_overflow`), `saturating_add/sub/mul`,
   `narrow<T>(x) -> Optional<T>` (C# `checked` cast), `div_ceil`, `is_pow2`, `popcount`, `countr_zero`.
   Перенести битовые утилиты из `utility.h` сюда, оставив `#include` для совместимости. `(независимо)`

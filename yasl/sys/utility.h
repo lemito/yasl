@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bits.h"
 #include "traits.h"
 
 #include <new> // placement new: language support
@@ -114,30 +115,6 @@ namespace yasl {
 
     constexpr size_t str_length(const char* s) noexcept {
         return __builtin_strlen(s);
-    }
-
-    // Bits
-
-    template <UnsignedIntegral T>
-    constexpr int countl_zero(T x) noexcept {
-        constexpr int bits = int(sizeof(T) * 8);
-        if (x == 0) {
-            return bits;
-        }
-        if constexpr (sizeof(T) <= 4) {
-            return __builtin_clz(uint32(x)) - (32 - bits);
-        } else {
-            return __builtin_clzll(uint64(x));
-        }
-    }
-
-    template <UnsignedIntegral T>
-    constexpr int bit_width(T x) noexcept {
-        return int(sizeof(T) * 8) - countl_zero(x);
-    }
-
-    constexpr uint64 bit_ceil(uint64 x) noexcept {
-        return x <= 1 ? 1 : uint64(1) << bit_width(x - 1);
     }
 
     // Numeric limits
