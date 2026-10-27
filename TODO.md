@@ -174,7 +174,7 @@
 - [x] **5.3 `Channel<T>`** (Go channels): `make_channel<T>(capacity)` → `Sender<T>`/`Receiver<T>` (Shared-блок),
   `send` блокирует при заполнении, `recv() -> Optional<T>` (none после close и опустошения), `try_send/try_recv`,
   `close()`, итерация `for (auto v : rx)`. `capacity == 0` → rendezvous. `Зависит от:` 2.2, 5.2.
-- [ ] **5.4 `WaitGroup`** (Go), `Latch`, `ThreadPool` + `spawn(f) -> Future<T>` (простой, без work-stealing). P2.
+- [x] **5.4 `WaitGroup`** (Go), `Latch`, `ThreadPool` + `spawn(f) -> Future<T>` (простой, без work-stealing). P2.
 - [x] **5.5 `Atomic<T>`** — тонкая обёртка над `<atomic>` с явными `load/store/fetch_add(order)` и `Relaxed/Acquire/...`. P2.
 
 ## Фаза 6. Время, случайные числа, система — P1/P2
