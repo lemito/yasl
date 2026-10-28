@@ -291,5 +291,22 @@ int main(int argc, char** argv) {
   };
   bench("small alloc/free: system", filter, N, mixed(mem::system_resource()));
   bench("small alloc/free: chain", filter, N, mixed(mem::chain_resource()));
+  // A big array growing by push_back: realloc/mremap against copying.
+  {
+    constexpr size_t kBig = 20'000'000;
+    auto grow = [&](mem::Resource* res) {
+      return [&, res] {
+        Vector<uint64> v(res);
+        for (size_t i = 0; i < kBig; ++i) {
+          v.push_back(i);
+        }
+        keep(v.size());
+      };
+    };
+    bench("big push_back u64: system", filter, kBig,
+          grow(mem::system_resource()), 3);
+    bench("big push_back u64: chain", filter, kBig, grow(mem::chain_resource()),
+          3);
+  }
   return 0;
 }

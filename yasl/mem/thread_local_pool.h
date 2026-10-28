@@ -1,6 +1,7 @@
 #pragma once
 
 #include "compose.h"
+#include "page.h"
 
 namespace yasl::mem {
 // Small-block allocator with one heap per thread; a composition block, see

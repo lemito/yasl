@@ -521,7 +521,7 @@ template <class A> struct AllocHolder { [[no_unique_address]] A alloc_; };
 - Готово, когда: `Vector<int>` в `Arena` растёт без роста `reserved()` сверх итогового размера; нетривиальный `T` не идёт
   через realloc (тест с типом-счётчиком перемещений); бенчмарк push_back 10⁶ / 10⁸ до/после.
 
-### - [ ] **16.7 `mem::Pages` — страницы ОС для больших блоков.** P2. `Зависит от:` 16.1.
+### - [x] **16.7 `mem::Pages` — страницы ОС для больших блоков.** P2. `Зависит от:` 16.1.
 - `yasl/mem/page.{h,cpp}` + `yasl/mem/os_pages_{posix,win}.cpp`: `reserve/commit/decommit/release` —
   `mmap(PROT_NONE)` + `mprotect` / `munmap`; `VirtualAlloc(MEM_RESERVE|MEM_COMMIT)` / `VirtualFree`.
   Размер страницы у ОС один раз (`sysconf(_SC_PAGESIZE)` / `GetSystemInfo`). `allocate_at_least` отдаёт размер,
