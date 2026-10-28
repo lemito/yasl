@@ -150,14 +150,20 @@ YASL_TEST(vector_exception_safety) {
       v.emplace_back(i);
     }
     v.shrink_to_fit();
+    // The allocator may round the block up; fill the slack so that the next
+    // push_back has to relocate.
+    while (v.size() < v.capacity()) {
+      v.emplace_back(int(v.size()));
+    }
+    const size_t n = v.size();
 
     // Relocation copies (Probe's move is not noexcept); fail half-way through.
     Probe::copies_until_throw = 5;
     CHECK_THROWS(v.push_back(Probe(100)), std::runtime_error);
     Probe::copies_until_throw = -1;
-    CHECK_EQ(v.size(), size_t(10));
-    for (int i = 0; i < 10; ++i) {
-      CHECK_EQ(v[i].value, i);
+    CHECK_EQ(v.size(), n);
+    for (size_t i = 0; i < n; ++i) {
+      CHECK_EQ(v[i].value, int(i));
     }
 
     Vector<Probe> src(v.begin(), v.end(), &t);

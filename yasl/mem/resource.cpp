@@ -3,6 +3,7 @@
 #include <yasl/core/check.h>
 
 #include "sys.h"
+#include "thread_local_pool.h"
 
 namespace yasl::mem {
 namespace {
@@ -49,7 +50,11 @@ Resource* null_resource() noexcept { return immortal<NullResource>(); }
 
 Resource* default_resource() noexcept {
   Resource* res = t_default;
+#ifdef YASL_DEFAULT_ALLOC_CHAIN
+  return res ? res : chain_resource();
+#else
   return res ? res : system_resource();
+#endif
 }
 
 Resource* set_default_resource(Resource* res) noexcept {

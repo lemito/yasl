@@ -9,6 +9,7 @@
 #include <yasl/cont/assoc/string_map.h>
 #include <yasl/io/fmt.h>
 #include <yasl/mem/obj_pool.h>
+#include <yasl/mem/thread_local_pool.h>
 #include <yasl/rand/random.h>
 #include <yasl/str/builder.h>
 #include <yasl/time/time.h>
@@ -266,5 +267,29 @@ int main(int argc, char** argv) {
       head = next;
     }
   });
+  // Small blocks of mixed sizes, a sliding window of live ones.
+  auto mixed = [&](mem::Resource* res) {
+    return [&, res] {
+      constexpr size_t kWindow = 1024;
+      void* live[kWindow] = {};
+      size_t sizes[kWindow] = {};
+      Random rng(3);
+      for (size_t i = 0; i < N; ++i) {
+        size_t slot = i % kWindow;
+        if (live[slot]) {
+          res->deallocate(live[slot], sizes[slot], 8);
+        }
+        sizes[slot] = 8 + rng.next_u64() % 504;
+        live[slot] = res->allocate(sizes[slot], 8);
+      }
+      for (size_t i = 0; i < kWindow; ++i) {
+        if (live[i]) {
+          res->deallocate(live[i], sizes[i], 8);
+        }
+      }
+    };
+  };
+  bench("small alloc/free: system", filter, N, mixed(mem::system_resource()));
+  bench("small alloc/free: chain", filter, N, mixed(mem::chain_resource()));
   return 0;
 }

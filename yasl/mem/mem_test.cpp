@@ -196,7 +196,8 @@ YASL_TEST(mem_scoped_default) {
   CHECK_EQ(t.stats().live(), size_t(0));
 
   std::thread([&] {
-    CHECK_EQ(mem::default_resource(), mem::system_resource());
+    // A new thread starts with the global default, not the scoped one.
+    CHECK_EQ(mem::default_resource(), before);
   }).join();
 }
 

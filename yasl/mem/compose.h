@@ -216,6 +216,37 @@ class Segregator {
   [[no_unique_address]] Large large_;
 };
 
+// Routes by alignment: <= MaxAlign goes to Low, the rest to High.
+template <size_t MaxAlign, class Low, class High>
+class AlignSplit {
+ public:
+  Block alloc(size_t size, size_t align) noexcept {
+    return align <= MaxAlign ? low_.alloc(size, align)
+                             : high_.alloc(size, align);
+  }
+
+  void free(void* p, size_t size, size_t align) noexcept {
+    if (align <= MaxAlign) {
+      low_.free(p, size, align);
+    } else {
+      high_.free(p, size, align);
+    }
+  }
+
+  Block resize(void* p, size_t old_size, size_t want, size_t align) noexcept {
+    return align <= MaxAlign ? low_.resize(p, old_size, want, align)
+                             : high_.resize(p, old_size, want, align);
+  }
+
+  bool owns(const void* p) const noexcept {
+    return low_.owns(p) || high_.owns(p);
+  }
+
+ private:
+  [[no_unique_address]] Low low_;
+  [[no_unique_address]] High high_;
+};
+
 // The only virtual layer: a composition seen as a mem::Resource.
 template <class Composite>
 class AsResource final : public Resource {

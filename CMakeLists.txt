@@ -14,6 +14,12 @@ if(NOT YASL_MALLOC MATCHES "^(libc|tcmalloc|custom)$")
     message(FATAL_ERROR "YASL_MALLOC must be libc, tcmalloc or custom (got '${YASL_MALLOC}')")
 endif()
 
+set(YASL_DEFAULT_ALLOC "sys" CACHE STRING "Default resource: sys (system allocator) or chain (thread-local pools for small blocks)")
+set_property(CACHE YASL_DEFAULT_ALLOC PROPERTY STRINGS sys chain)
+if(NOT YASL_DEFAULT_ALLOC MATCHES "^(sys|chain)$")
+    message(FATAL_ERROR "YASL_DEFAULT_ALLOC must be sys or chain (got '${YASL_DEFAULT_ALLOC}')")
+endif()
+
 find_package(Threads REQUIRED)
 
 file(GLOB_RECURSE YASL_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/yasl/*.cpp)
@@ -38,6 +44,10 @@ if(YASL_MALLOC STREQUAL "tcmalloc")
         message(FATAL_ERROR "YASL_MALLOC=tcmalloc needs gperftools (e.g. apt install libgoogle-perftools-dev)")
     endif()
     target_link_libraries(yasl PUBLIC ${YASL_TCMALLOC_LIB})
+endif()
+
+if(YASL_DEFAULT_ALLOC STREQUAL "chain")
+    target_compile_definitions(yasl PRIVATE YASL_DEFAULT_ALLOC_CHAIN)
 endif()
 
 if(MSVC)

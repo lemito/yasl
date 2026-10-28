@@ -56,3 +56,6 @@
 2026-10-28 16.1 mem::sys (libc/tcmalloc/custom, YASL_MALLOC), SystemResource отдаёт реальный размер, Tracking считает запрошенный; CI: tcmalloc/custom/macos. tcmalloc и Windows/macOS локально не проверены (нет окружения) — проверит CI
 2026-10-28 16.2 mem/compose.h: BumpRegion, StackBuffer, SysBlock, Fallback, Segregator, AsResource; Arena переведена на BumpRegion (пустые композиции из РАЗНЫХ типов = 1 байт; два члена одного типа дают 2)
 2026-10-28 16.3 mem::Frame<N> (стек → upstream, проверка живых блоков в Debug)
+2026-10-28 16.4 mem::ThreadLocalPool (слабы 64 KiB по маске адреса, remote-free, передача слабов при выходе потока, 28 классов: шаг 16 до 128, затем 4 на октаву — отличие от плана: 8/10/12/14 не берём, нужна 16-байтная выровненность), AlignSplit, DefaultChain, chain_resource(), YASL_DEFAULT_ALLOC=sys|chain (по умолчанию sys). TSan чисто.
+  Бенчмарк (Release, glibc): "small alloc/free mixed": system 10.2 ns/op, chain 10.3 — паритет (tcache у glibc уже быстр); hashmap<String> insert 240→128, stringmap insert 1150→840, но шум между запусками ~30%. Выигрыша против glibc нет → умолчание остаётся sys. Против tcmalloc не мерилось (не установлен).
+  Pool (степени двойки) не переводился на новые классы.
