@@ -237,3 +237,7 @@ YASL_TEST(vector_basic) {
 
 В CI (`.github/workflows/ci.yml`) собираются: clang с ASan и UBSan, clang с TSan, GCC в Release с `-Werror`,
 сборки с `YASL_MALLOC=tcmalloc` и `custom`, macOS, проверка include-политики и установка с `find_package`.
+
+---
+
+В разработке использовался AI
