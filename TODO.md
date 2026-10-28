@@ -414,7 +414,7 @@
   `cmake --install` + `find_package(yasl)` у потребителя с tcmalloc линкуется.
   Windows-код пишется под `_WIN32`, но **без Windows-CI не проверен** — сослаться на открытый вопрос 9.1, не утверждать обратное.
 
-### - [ ] **16.2 Композиция аллокаторов на CRTP: `StackBuffer`, `Fallback`, `Segregator`, `AsResource`.** P0. `Зависит от:` 16.1.
+### - [x] **16.2 Композиция аллокаторов на CRTP: `StackBuffer`, `Fallback`, `Segregator`, `AsResource`.** P0. `Зависит от:` 16.1.
 - Файл `yasl/mem/compose.h`. «Строительный блок» — класс со статическим интерфейсом
   `Block alloc(size, align)`, `void free(p, size, align)`, `Block resize(...)`, `bool owns(const void*)`.
   Комбинаторы — шаблоны, члены хранятся с `[[no_unique_address]]` (пустые блоки = 0 байт), вызовы не виртуальные:

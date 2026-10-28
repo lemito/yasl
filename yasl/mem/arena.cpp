@@ -6,10 +6,6 @@ namespace yasl::mem {
 namespace {
 constexpr size_t kMaxChunk = size_t(1) << 30;
 
-char* align_ptr(char* p, size_t align) noexcept {
-  return reinterpret_cast<char*>(
-      align_up(reinterpret_cast<uintptr_t>(p), align));
-}
 }  // namespace
 
 Arena::Arena(Resource* upstream, size_t first_chunk) noexcept
@@ -21,30 +17,27 @@ Arena::Arena(void* buffer, size_t size, Resource* upstream) noexcept
       initial_(static_cast<char*>(buffer)),
       initial_size_(size),
       next_chunk_(yasl::max<size_t>(size * 2, 4096)),
-      cur_(initial_),
-      end_(initial_ + size) {}
+      region_(buffer, size) {}
 
 Block Arena::do_alloc(size_t size, size_t align) {
   YASL_ASSERT(is_pow2(align));
   if (size == 0) {
     size = 1;
   }
-  char* p = align_ptr(cur_, align);
-  if (!cur_ || p > end_ || size_t(end_ - p) < size) {
+  Block b = region_.alloc(size, align);
+  if (!b.ptr) {
     grow(size, align);
-    p = align_ptr(cur_, align);
+    b = region_.alloc(size, align);
   }
-  cur_ = p + size;
-  used_ += size;
-  return {p, size};
+  used_ += b.size;
+  return b;
 }
 
 void Arena::do_free(void* ptr, size_t size, size_t) noexcept {
   // Roll back the most recent allocation; everything else waits for release().
-  if (static_cast<char*>(ptr) + size == cur_) {
-    cur_ = static_cast<char*>(ptr);
-    used_ -= size;
-  }
+  char* before = region_.cur();
+  region_.free(ptr, size);
+  used_ -= size_t(before - region_.cur());
 }
 
 void Arena::grow(size_t size, size_t align) {
@@ -56,8 +49,7 @@ void Arena::grow(size_t size, size_t align) {
   Block b =
       upstream_->allocate_at_least(yasl::max(next_chunk_, need), kMaxAlign);
   chunks_ = ::new (b.ptr) Chunk{chunks_, b.size};
-  cur_ = static_cast<char*>(b.ptr) + header;
-  end_ = static_cast<char*>(b.ptr) + b.size;
+  region_ = BumpRegion(static_cast<char*>(b.ptr) + header, b.size - header);
   reserved_ += b.size;
   next_chunk_ = yasl::min(yasl::max(next_chunk_, need) * 2, kMaxChunk);
 }
@@ -68,15 +60,14 @@ void Arena::release() noexcept {
     upstream_->deallocate(chunks_, chunks_->size, kMaxAlign);
     chunks_ = prev;
   }
-  cur_ = initial_;
-  end_ = initial_ ? initial_ + initial_size_ : nullptr;
+  region_ = BumpRegion(initial_, initial_size_);
   used_ = 0;
   reserved_ = 0;
 }
 
 void Arena::reset() noexcept {
   if (!chunks_) {
-    cur_ = initial_;
+    region_ = BumpRegion(initial_, initial_size_);
     used_ = 0;
     return;
   }
@@ -87,8 +78,9 @@ void Arena::reset() noexcept {
     c = prev;
   }
   keep->prev = nullptr;
-  cur_ = reinterpret_cast<char*>(keep) + align_up(sizeof(Chunk), kMaxAlign);
-  end_ = reinterpret_cast<char*>(keep) + keep->size;
+  size_t header = align_up(sizeof(Chunk), kMaxAlign);
+  region_ =
+      BumpRegion(reinterpret_cast<char*>(keep) + header, keep->size - header);
   used_ = 0;
   reserved_ = keep->size;
 }

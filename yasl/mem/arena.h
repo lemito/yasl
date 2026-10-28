@@ -1,5 +1,6 @@
 #pragma once
 
+#include "compose.h"
 #include "resource.h"
 
 namespace yasl::mem {
@@ -53,8 +54,7 @@ class Arena : public Resource {
   size_t initial_size_ = 0;
   size_t next_chunk_;
   Chunk* chunks_ = nullptr;
-  char* cur_ = nullptr;
-  char* end_ = nullptr;
+  BumpRegion region_;
   size_t used_ = 0;
   size_t reserved_ = 0;
 };

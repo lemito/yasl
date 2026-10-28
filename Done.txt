@@ -54,3 +54,4 @@
 2026-10-27 Style: .clang-format (Google), все исходники переформатированы
 2026-10-28 11.4 RadixTrie<V> (сжатие путей, отдельным типом), StringMap на нём; insert 2100→1180 ns/op, find без изменений (~850)
 2026-10-28 16.1 mem::sys (libc/tcmalloc/custom, YASL_MALLOC), SystemResource отдаёт реальный размер, Tracking считает запрошенный; CI: tcmalloc/custom/macos. tcmalloc и Windows/macOS локально не проверены (нет окружения) — проверит CI
+2026-10-28 16.2 mem/compose.h: BumpRegion, StackBuffer, SysBlock, Fallback, Segregator, AsResource; Arena переведена на BumpRegion (пустые композиции из РАЗНЫХ типов = 1 байт; два члена одного типа дают 2)

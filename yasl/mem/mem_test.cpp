@@ -2,6 +2,7 @@
 #include <yasl/compat/pmr.h>
 #include <yasl/cont/seq/vector.h>
 #include <yasl/mem/arena.h>
+#include <yasl/mem/compose.h>
 #include <yasl/mem/pool.h>
 #include <yasl/mem/sync.h>
 #include <yasl/mem/sys.h>
@@ -324,4 +325,97 @@ YASL_TEST(system_resource_reports_real_size) {
   mem::Block big = mem::system_resource()->allocate_at_least(10, 4096);
   CHECK_EQ(reinterpret_cast<size_t>(big.ptr) % 4096, size_t(0));
   mem::system_resource()->deallocate(big.ptr, 10, 4096);
+}
+
+namespace {
+// A block that counts what reaches it, for routing tests.
+struct CountingBlock {
+  static inline int allocs = 0;
+  static inline int frees = 0;
+
+  mem::Block alloc(size_t size, size_t align) noexcept {
+    ++allocs;
+    return mem::SysBlock().alloc(size, align);
+  }
+
+  void free(void* p, size_t size, size_t align) noexcept {
+    ++frees;
+    mem::SysBlock().free(p, size, align);
+  }
+
+  mem::Block resize(void*, size_t, size_t, size_t) noexcept { return {}; }
+
+  bool owns(const void*) const noexcept { return true; }
+};
+}  // namespace
+
+YASL_TEST(compose_stack_buffer) {
+  mem::StackBuffer<256> sb;
+  mem::Block a = sb.alloc(96, 8);
+  CHECK(a.ptr != nullptr);
+  CHECK(sb.owns(a.ptr));
+  mem::Block b = sb.alloc(96, 8);
+  CHECK(sb.owns(b.ptr));
+  CHECK(sb.alloc(96, 8).ptr == nullptr);  // does not fit
+  // LIFO rollback and in-place growth of the newest block.
+  sb.free(b.ptr, 96, 8);
+  CHECK_EQ(sb.used(), size_t(96));
+  mem::Block g = sb.resize(a.ptr, 96, 200, 8);
+  CHECK(g.ptr == a.ptr);
+  CHECK(sb.resize(a.ptr, 200, 400, 8).ptr == nullptr);
+  int local = 0;
+  CHECK(!sb.owns(&local));
+}
+
+YASL_TEST(compose_fallback_routing) {
+  CountingBlock::allocs = CountingBlock::frees = 0;
+  mem::Fallback<mem::StackBuffer<128>, CountingBlock> f;
+  mem::Block small = f.alloc(64, 8);  // stack
+  mem::Block big = f.alloc(1000, 8);  // does not fit: secondary
+  CHECK_EQ(CountingBlock::allocs, 1);
+  CHECK(f.owns(small.ptr));
+  f.free(small.ptr, 64, 8);
+  CHECK_EQ(CountingBlock::frees, 0);  // went to the stack buffer
+  f.free(big.ptr, 1000, 8);
+  CHECK_EQ(CountingBlock::frees, 1);
+}
+
+YASL_TEST(compose_segregator_routing) {
+  CountingBlock::allocs = CountingBlock::frees = 0;
+  mem::Segregator<64, mem::StackBuffer<256>, CountingBlock> s;
+  mem::Block small = s.alloc(32, 8);
+  CHECK_EQ(CountingBlock::allocs, 0);
+  mem::Block large = s.alloc(65, 8);
+  CHECK_EQ(CountingBlock::allocs, 1);
+  s.free(large.ptr, 65, 8);
+  CHECK_EQ(CountingBlock::frees, 1);
+  s.free(small.ptr, 32, 8);
+  CHECK_EQ(CountingBlock::frees, 1);
+  // Crossing the threshold is not an in-place resize.
+  mem::Block m = s.alloc(32, 8);
+  CHECK(s.resize(m.ptr, 32, 100, 8).ptr == nullptr);
+  // A small backend that reports more than the threshold is clamped.
+  mem::Segregator<16, mem::SysBlock, mem::SysBlock> c;
+  mem::Block cb = c.alloc(10, 8);
+  CHECK(cb.size <= 16);
+  c.free(cb.ptr, cb.size, 8);
+}
+
+YASL_TEST(compose_as_resource_and_sizes) {
+  static_assert(sizeof(mem::SysBlock) == 1);
+  // Two members of one empty type must have distinct addresses, so the
+  // empty-composition check uses distinct types.
+  static_assert(sizeof(mem::Fallback<mem::SysBlock, CountingBlock>) == 1);
+  static_assert(sizeof(mem::Segregator<64, mem::SysBlock, CountingBlock>) == 1);
+
+  {
+    mem::AsResource<mem::Fallback<mem::StackBuffer<512>, mem::SysBlock>> r;
+    Vector<int> v(&r);
+    for (int i = 0; i < 1000; ++i) {
+      v.push_back(i);  // starts on the stack, ends on the heap
+    }
+    CHECK_EQ(v[999], 999);
+  }
+  mem::AsResource<mem::StackBuffer<16>> tiny;
+  CHECK_THROWS(tiny.allocate(64), BadAlloc);
 }
