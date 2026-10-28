@@ -271,6 +271,12 @@ class AsResource final : public Resource {
     c_.free(p, size, align);
   }
 
+  // Composition blocks may move the bytes, so only for relocatable contents.
+  Block do_resize(void* p, size_t old_size, size_t want, size_t align,
+                  bool relocatable) override {
+    return relocatable ? c_.resize(p, old_size, want, align) : Block{};
+  }
+
  private:
   Composite c_;
 };

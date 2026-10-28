@@ -40,6 +40,9 @@ class Arena : public Resource {
  protected:
   Block do_alloc(size_t size, size_t align) override;
   void do_free(void* ptr, size_t size, size_t align) noexcept override;
+  // Grows or shrinks the most recent block in place.
+  Block do_resize(void* ptr, size_t old_size, size_t want, size_t align,
+                  bool relocatable) override;
 
  private:
   struct Chunk {

@@ -35,6 +35,12 @@ class Synchronized final : public Resource {
     inner_.deallocate(ptr, size, align);
   }
 
+  Block do_resize(void* ptr, size_t old_size, size_t want, size_t align,
+                  bool relocatable) override {
+    LockGuard lock(mutex_);
+    return inner_.resize(ptr, old_size, want, align, relocatable);
+  }
+
  private:
   Mutex mutex_;
   R inner_;

@@ -210,6 +210,13 @@ concept DerivedFrom =
 template <class T>
 concept TriviallyCopyable = __is_trivially_copyable(T);
 
+// True if moving a T to new storage with memcpy (and not running the old
+// destructor) is the same as move-construct + destroy. Containers use it to
+// grow blocks with realloc. Trivially copyable types qualify; owning handles
+// (String, Vector, Unique, Shared) specialise it.
+template <class T>
+inline constexpr bool IsTriviallyRelocatable = __is_trivially_copyable(T);
+
 #if defined(__has_builtin) && __has_builtin(__is_trivially_destructible)
 template <class T>
 concept TriviallyDestructible = __is_trivially_destructible(T);

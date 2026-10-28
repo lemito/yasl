@@ -40,6 +40,14 @@ void Arena::do_free(void* ptr, size_t size, size_t) noexcept {
   used_ -= size_t(before - region_.cur());
 }
 
+Block Arena::do_resize(void* ptr, size_t old_size, size_t want, size_t, bool) {
+  Block b = region_.resize(ptr, old_size, want);
+  if (b.ptr) {
+    used_ = used_ - old_size + b.size;
+  }
+  return b;
+}
+
 void Arena::grow(size_t size, size_t align) {
   size_t header = align_up(sizeof(Chunk), kMaxAlign);
   if (size > max_value<size_t>() - header - align) {

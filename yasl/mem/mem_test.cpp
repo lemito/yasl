@@ -8,6 +8,7 @@
 #include <yasl/mem/sync.h>
 #include <yasl/mem/sys.h>
 #include <yasl/mem/tracking.h>
+#include <yasl/str/str.h>
 #include <yasl/test/test.h>
 
 #include <cstdint>
@@ -471,4 +472,88 @@ YASL_TEST(mem_object_sizes) {
   static_assert(sizeof(mem::Pool) <= 8 + 8 + 16 + 8 + 16 + 28 * 8);
   static_assert(sizeof(mem::Arena) <= 8 + 8 + 16 + 8 + 8 + 24 + 8);
   static_assert(sizeof(mem::InlineArena<256>) - 256 <= sizeof(mem::Arena) + 16);
+}
+
+namespace {
+// Not trivially relocatable as far as the library knows: it counts its moves.
+struct Counted {
+  static inline int moves = 0;
+  int v;
+
+  explicit Counted(int x) : v(x) {}
+
+  Counted(Counted&& o) noexcept : v(o.v) { ++moves; }
+
+  Counted(const Counted& o) : v(o.v) { ++moves; }
+
+  ~Counted() {}
+};
+}  // namespace
+
+YASL_TEST(resize_vector_grows_in_place_in_arena) {
+  mem::Tracking up;
+  mem::Arena arena(&up, 1 << 20);
+  {
+    Vector<int> v(&arena);
+    for (int i = 0; i < 10000; ++i) {
+      v.push_back(i);
+    }
+    CHECK_EQ(v[9999], 9999);
+    // Every growth extended the same block: the arena holds about the final
+    // capacity, not the sum of all the doublings.
+    CHECK(arena.used() <= v.capacity() * sizeof(int) + 64);
+  }
+}
+
+YASL_TEST(resize_skips_nontrivial_types) {
+  mem::Tracking t;
+  {
+    Vector<Counted> v(&t);
+    for (int i = 0; i < 100; ++i) {
+      v.emplace_back(i);
+    }
+    CHECK_EQ(t.stats().resizes, size_t(0));
+    CHECK(Counted::moves > 0);
+    CHECK_EQ(v[99].v, 99);
+  }
+  mem::Tracking t2;
+  {
+    Vector<String> v(&t2);  // String is declared trivially relocatable
+    for (int i = 0; i < 100; ++i) {
+      v.push_back(String("some longer string to avoid nothing"));
+    }
+    CHECK_EQ(v[99], "some longer string to avoid nothing");
+  }
+  CHECK_EQ(t2.stats().live(), size_t(0));
+}
+
+YASL_TEST(resize_alias_push_back_survives_growth) {
+  mem::Tracking t;
+  {
+    Vector<int> v(&t);
+    v.push_back(7);
+    for (int i = 0; i < 1000; ++i) {
+      v.push_back(v[0]);  // the argument lives in the block being grown
+    }
+    CHECK_EQ(v[1000], 7);
+  }
+  CHECK_EQ(t.stats().live(), size_t(0));
+}
+
+YASL_TEST(resize_string_and_resource_fallbacks) {
+  mem::Tracking t;
+  {
+    String s(&t);
+    for (int i = 0; i < 1000; ++i) {
+      s.push_back('x');
+    }
+    CHECK_EQ(s.size(), size_t(1000));
+  }
+  CHECK_EQ(t.stats().live(), size_t(0));
+  // A resource that cannot resize says so.
+  CHECK(mem::null_resource()->resize(nullptr, 0, 8).ptr == nullptr);
+  mem::Pool pool;
+  void* p = pool.allocate(16);
+  CHECK(pool.resize(p, 16, 32, mem::kMaxAlign, true).ptr == nullptr);
+  pool.deallocate(p, 16);
 }

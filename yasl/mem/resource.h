@@ -49,6 +49,17 @@ class Resource {
     do_free(ptr, size, align);
   }
 
+  // Changes the size of a block without a copy through the caller: in place,
+  // or (only if `relocatable`) by moving the bytes. Returns the block (the
+  // pointer may differ, the old one is then invalid) or {} when the resource
+  // cannot, in which case the block is untouched and the caller does
+  // allocate + relocate + deallocate. `old_size` is the size the block was
+  // requested with or reported as.
+  Block resize(void* ptr, size_t old_size, size_t want,
+               size_t align = kMaxAlign, bool relocatable = false) {
+    return do_resize(ptr, old_size, want, align, relocatable);
+  }
+
   bool is_equal(const Resource& other) const noexcept {
     return this == &other || do_is_equal(other);
   }
@@ -89,6 +100,8 @@ class Resource {
  protected:
   virtual Block do_alloc(size_t size, size_t align) = 0;
   virtual void do_free(void* ptr, size_t size, size_t align) noexcept = 0;
+
+  virtual Block do_resize(void*, size_t, size_t, size_t, bool) { return {}; }
 
   virtual bool do_is_equal(const Resource&) const noexcept { return false; }
 };

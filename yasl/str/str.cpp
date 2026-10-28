@@ -51,6 +51,16 @@ char* String::splice(size_t pos, size_t remove, size_t insert) {
   size_t ns = kept + insert;
   size_t tail = old - pos - remove;
 
+  if (unique() && ns > rep_->cap) {
+    // Try to grow the block where it is.
+    size_t cap = yasl::max(ns, rep_->cap * 2);
+    mem::Block b = rep_->res->resize(rep_, sizeof(Rep) + rep_->cap + 1,
+                                     sizeof(Rep) + cap + 1, alignof(Rep), true);
+    if (b.ptr) {
+      rep_ = static_cast<Rep*>(b.ptr);
+      rep_->cap = b.size - sizeof(Rep) - 1;
+    }
+  }
   if (unique() && ns <= rep_->cap) {
     char* d = rep_->chars();
     yasl::mem_move(d + pos + insert, d + pos + remove, tail);

@@ -21,6 +21,11 @@ class SystemResource final : public Resource {
   void do_free(void* ptr, size_t size, size_t align) noexcept override {
     sys::free(ptr, size, align);
   }
+
+  Block do_resize(void* ptr, size_t old_size, size_t want, size_t align,
+                  bool relocatable) override {
+    return relocatable ? sys::resize(ptr, old_size, want, align) : Block{};
+  }
 };
 
 class NullResource final : public Resource {

@@ -13,6 +13,7 @@ class Tracking final : public Resource {
     size_t bytes_in_use = 0;
     size_t peak_bytes = 0;
     size_t total_bytes = 0;
+    size_t resizes = 0;  // successful in-place or moving resizes
 
     size_t live() const noexcept { return allocations - deallocations; }
   };
@@ -40,6 +41,19 @@ class Tracking final : public Resource {
     // The caller may pass anything between the requested and the reported size.
     stats_.bytes_in_use -= yasl::min(size, stats_.bytes_in_use);
     upstream_->deallocate(ptr, size, align);
+  }
+
+  Block do_resize(void* ptr, size_t old_size, size_t want, size_t align,
+                  bool relocatable) override {
+    Block b = upstream_->resize(ptr, old_size, want, align, relocatable);
+    if (b.ptr) {
+      ++stats_.resizes;
+      stats_.bytes_in_use -= yasl::min(old_size, stats_.bytes_in_use);
+      stats_.bytes_in_use += want;
+      stats_.total_bytes += want;
+      stats_.peak_bytes = yasl::max(stats_.peak_bytes, stats_.bytes_in_use);
+    }
+    return b;
   }
 
  private:

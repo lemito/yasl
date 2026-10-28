@@ -322,6 +322,11 @@ class ChainResource final : public Resource {
     chain_.free(p, size, align);
   }
 
+  Block do_resize(void* p, size_t old_size, size_t want, size_t align,
+                  bool relocatable) override {
+    return relocatable ? chain_.resize(p, old_size, want, align) : Block{};
+  }
+
  private:
   DefaultChain chain_;
 };

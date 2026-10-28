@@ -301,6 +301,17 @@ class SmallVector {
     if (n > max_size()) {
       throw LengthError("yasl::SmallVector: too large");
     }
+    if constexpr (IsTriviallyRelocatable<T>) {
+      if (!is_inline()) {
+        mem::Block b = res_->resize(data_, cap_ * sizeof(T), n * sizeof(T),
+                                    alignof(T), true);
+        if (b.ptr) {
+          data_ = static_cast<T*>(b.ptr);
+          cap_ = n;
+          return;
+        }
+      }
+    }
     T* fresh = static_cast<T*>(res_->allocate(n * sizeof(T), alignof(T)));
     try {
       detail::relocate(data_, size_, fresh);

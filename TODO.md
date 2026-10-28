@@ -507,7 +507,7 @@ template <class A> struct AllocHolder { [[no_unique_address]] A alloc_; };
   `initial_`/`initial_size_` (стековый буфер — `StackBuffer` из 16.2); `used_`/`reserved_` — только под `YASL_MEM_STATS`
   (статистика и так есть в `Tracking`). `static_assert` на `sizeof(Pool)`, `sizeof(Arena)`, `sizeof(InlineArena<N>) - N`.
 
-### - [ ] **16.6 Рост на месте: `Resource::resize`.** P1. `Зависит от:` 16.1, 16.2.
+### - [x] **16.6 Рост на месте: `Resource::resize`.** P1. `Зависит от:` 16.1, 16.2.
 - `resource.h`: невиртуальный `Block resize(void* p, size_t old, size_t want, size_t align, bool relocatable)` +
   виртуальный `do_resize`, по умолчанию «не умею» → вызывающий идёт старым путём alloc+relocate+free.
   Размер объектов не меняется (только vtable).

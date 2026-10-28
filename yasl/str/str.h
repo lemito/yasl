@@ -367,6 +367,9 @@ inline String String::to_upper() const { return yasl::to_upper(view(), res_); }
 
 inline String String::to_lower() const { return yasl::to_lower(view(), res_); }
 
+template <>
+inline constexpr bool IsTriviallyRelocatable<String> = true;
+
 namespace literals {
 inline String operator""_s(const char* s, size_t n) { return String(s, n); }
 }  // namespace literals

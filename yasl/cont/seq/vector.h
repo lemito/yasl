@@ -527,7 +527,28 @@ class Vector {
     return yasl::max(yasl::max(need, doubled), size_t(4));
   }
 
+  // Tries to resize the block in place (or by a bitwise move); only for types
+  // that may be moved with memcpy.
+  bool try_resize(size_t n) {
+    if constexpr (IsTriviallyRelocatable<T>) {
+      if (!data_ || n > max_size() || n == 0) {
+        return false;
+      }
+      mem::Block b = res_->resize(data_, cap_ * sizeof(T), n * sizeof(T),
+                                  alignof(T), true);
+      if (b.ptr) {
+        data_ = static_cast<T*>(b.ptr);
+        cap_ = b.size / sizeof(T);
+        return true;
+      }
+    }
+    return false;
+  }
+
   void reallocate(size_t n) {
+    if (try_resize(n)) {
+      return;
+    }
     Buffer b = allocate(n);
     try {
       detail::relocate(data_, size_, b.ptr);
@@ -544,6 +565,33 @@ class Vector {
   // tail, then relocates the existing elements in front of them.
   template <class F>
   void grow_and_construct(size_t new_cap, size_t count, F&& construct) {
+    if constexpr (IsTriviallyRelocatable<T>) {
+      if (count == 1 && data_) {
+        // Build the element first (its arguments may point into the old
+        // buffer), then grow the block and move the element into place.
+        alignas(T) unsigned char tmp[sizeof(T)];
+        construct(reinterpret_cast<T*>(tmp));
+        if (try_resize(new_cap)) {
+          mem_copy(data_ + size_, tmp, sizeof(T));
+          ++size_;
+          return;
+        }
+        Buffer b;
+        try {
+          b = allocate(new_cap);
+        } catch (...) {
+          reinterpret_cast<T*>(tmp)->~T();
+          throw;
+        }
+        detail::relocate(data_, size_, b.ptr);
+        mem_copy(b.ptr + size_, tmp, sizeof(T));
+        deallocate(data_, cap_);
+        data_ = b.ptr;
+        cap_ = b.cap;
+        ++size_;
+        return;
+      }
+    }
     Buffer b = allocate(new_cap);
     try {
       construct(b.ptr + size_);
@@ -586,4 +634,6 @@ class Vector {
   mem::Resource* res_;
 };
 
+template <class T>
+inline constexpr bool IsTriviallyRelocatable<Vector<T>> = true;
 }  // namespace yasl

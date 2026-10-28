@@ -309,4 +309,7 @@ template <class T, class... Args>
 Shared<T> make_shared_in(mem::Resource* res, Args&&... args) {
   return Shared<T>::template make_in<T>(res, yasl::forward<Args>(args)...);
 }
+
+template <class T>
+inline constexpr bool IsTriviallyRelocatable<Shared<T>> = true;
 }  // namespace yasl

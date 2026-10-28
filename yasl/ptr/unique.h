@@ -136,4 +136,7 @@ template <class T, class U, class... Args>
 Unique<T> make_unique_as(mem::Resource* res, Args&&... args) {
   return Unique<T>::template make_in<U>(res, yasl::forward<Args>(args)...);
 }
+
+template <class T>
+inline constexpr bool IsTriviallyRelocatable<Unique<T>> = true;
 }  // namespace yasl
