@@ -479,7 +479,7 @@ template <class A> struct AllocHolder { [[no_unique_address]] A alloc_; };
 в объекте; пустой контейнер с нестандартным ресурсом получает заголовок нулевой ёмкости из этого ресурса.
 `static_assert` на размеры — в тестах каждого контейнера.
 
-- [ ] **16.5a `HashMap`/`HashSet`** (`hash_map.h`): `{cap, size, growth_left, res}` → префикс уже единого блока
+- [x] **16.5a `HashMap`/`HashSet`** (`hash_map.h`): `{cap, size, growth_left, res}` → префикс уже единого блока
   slots+ctrl; объект = 1 указатель (`ctrl_`; слоты по отрицательному смещению). 48 → 8 байт.
   Готово: рандомизированные тесты против `std::unordered_map` проходят без изменений, бенчмарки hashmap не хуже.
 - [ ] **16.5b `String` + SSO** (`yasl/str/str.{h,cpp}`): union `{ char inline_[23]; Rep* rep_; }`, длина+тег в последнем

@@ -47,12 +47,35 @@ inline size_t first_byte(uint64 mask) noexcept {
 }
 
 constexpr size_t max_items(size_t cap) noexcept { return cap - cap / 8; }
+
+// Bookkeeping at the front of the control bytes of every table block. The
+// object itself holds just a pointer to the control bytes; the slots lie
+// before the header.
+struct TableHeader {
+  size_t cap;          // slots, a power of two, or 0 for an empty table
+  size_t size;         // full slots
+  size_t growth_left;  // empty slots that may still be filled before a rehash
+  mem::Resource* res;  // the block's resource; null = default one, no block
+};
+
+// What every table without a block points to: no allocation for an empty
+// table. Never written to.
+struct EmptyBlock {
+  TableHeader header;
+  uint8 ctrl[kGroup];
+};
+
+inline EmptyBlock kEmptyBlock = {
+    {0, 0, 0, nullptr},
+    {kEmpty, kEmpty, kEmpty, kEmpty, kEmpty, kEmpty, kEmpty, kEmpty}};
 }  // namespace detail
 
 // Hash table with open addressing in the style of Swiss tables: one control
 // byte per slot (7 bits of the hash or empty/deleted) probed eight at a time
-// with plain 64-bit arithmetic, triangular probing, 7/8 maximum load. Slots and
-// control bytes share one allocation.
+// with plain 64-bit arithmetic, triangular probing, 7/8 maximum load. Slots,
+// bookkeeping and control bytes share one allocation, and the object is a
+// single pointer (an empty table points to a static block and allocates
+// nothing).
 //
 // Iterators, pointers and references are invalidated by any insertion that
 // rehashes; erasing never moves other elements. Iteration order is unspecified.
@@ -120,11 +143,17 @@ class HashTable {
   using iterator =
       Conditional<SameAs<KeyOf, Identity>, Iter<true>, Iter<false>>;
 
-  HashTable() noexcept : HashTable(mem::default_resource()) {}
+  HashTable() noexcept : ctrl_(empty_ctrl()) {}
 
-  explicit HashTable(mem::Resource* res, Hasher hash = Hasher(),
-                     Eq eq = Eq()) noexcept
-      : res_(res), hash_(yasl::move(hash)), eq_(yasl::move(eq)) {}
+  // A table on a non-default resource keeps the resource in a block of its own
+  // (so the constructor may throw); on the default resource it allocates
+  // nothing.
+  explicit HashTable(mem::Resource* res, Hasher hash = Hasher(), Eq eq = Eq())
+      : ctrl_(empty_ctrl()), hash_(yasl::move(hash)), eq_(yasl::move(eq)) {
+    if (res != mem::default_resource()) {
+      ctrl_ = allocate_block(0, res);
+    }
+  }
 
   HashTable(std::initializer_list<T> il,
             mem::Resource* res = mem::default_resource())
@@ -135,19 +164,21 @@ class HashTable {
     }
   }
 
-  HashTable(const HashTable& other) : HashTable(other, other.res_) {}
+  HashTable(const HashTable& other) : HashTable(other, other.resource()) {}
 
   HashTable(const HashTable& other, mem::Resource* res)
       : HashTable(res, other.hash_, other.eq_) {
-    if (other.size_ == 0) {
+    const size_t other_cap = other.hdr().cap;
+    if (other.hdr().size == 0) {
       return;
     }
-    allocate_table(other.cap_);
+    free_table();
+    ctrl_ = allocate_block(other.hdr().cap, res);
     // Same slot layout and control bytes (tombstones included), so probe chains
     // stay intact.
     size_t i = 0;
     try {
-      for (; i < other.cap_; ++i) {
+      for (; i < other_cap; ++i) {
         if (other.ctrl_[i] < detail::kDeleted) {
           yasl::construct_at(slot(i), *other.slot(i));
         }
@@ -161,18 +192,14 @@ class HashTable {
       free_table();
       throw;
     }
-    yasl::mem_copy(ctrl_, other.ctrl_, cap_ + detail::kGroup);
-    size_ = other.size_;
-    growth_left_ = other.growth_left_;
+    yasl::mem_copy(ctrl_, other.ctrl_, other_cap + detail::kGroup);
+    hdr().size = other.hdr().size;
+    hdr().growth_left = other.hdr().growth_left;
   }
 
+  // The moved-from table is empty and on the default resource.
   HashTable(HashTable&& other) noexcept
-      : slots_(yasl::exchange(other.slots_, nullptr)),
-        ctrl_(yasl::exchange(other.ctrl_, nullptr)),
-        cap_(yasl::exchange(other.cap_, size_t(0))),
-        size_(yasl::exchange(other.size_, size_t(0))),
-        growth_left_(yasl::exchange(other.growth_left_, size_t(0))),
-        res_(other.res_),
+      : ctrl_(yasl::exchange(other.ctrl_, empty_ctrl())),
         hash_(yasl::move(other.hash_)),
         eq_(yasl::move(other.eq_)) {}
 
@@ -183,7 +210,7 @@ class HashTable {
 
   HashTable& operator=(const HashTable& other) {
     if (this != &other) {
-      HashTable tmp(other, res_);
+      HashTable tmp(other, resource());
       swap(tmp);
     }
     return *this;
@@ -193,49 +220,46 @@ class HashTable {
     if (this != &other) {
       destroy_all();
       free_table();
-      slots_ = yasl::exchange(other.slots_, nullptr);
-      ctrl_ = yasl::exchange(other.ctrl_, nullptr);
-      cap_ = yasl::exchange(other.cap_, size_t(0));
-      size_ = yasl::exchange(other.size_, size_t(0));
-      growth_left_ = yasl::exchange(other.growth_left_, size_t(0));
-      res_ = other.res_;
+      ctrl_ = yasl::exchange(other.ctrl_, empty_ctrl());
       hash_ = yasl::move(other.hash_);
       eq_ = yasl::move(other.eq_);
     }
     return *this;
   }
 
-  size_t size() const noexcept { return size_; }
+  size_t size() const noexcept { return hdr().size; }
 
-  bool empty() const noexcept { return size_ == 0; }
+  bool empty() const noexcept { return hdr().size == 0; }
 
-  mem::Resource* resource() const noexcept { return res_; }
+  mem::Resource* resource() const noexcept {
+    return hdr().res ? hdr().res : mem::default_resource();
+  }
 
   // Number of slots (a power of two, or 0 before the first insertion).
-  size_t bucket_count() const noexcept { return cap_; }
+  size_t bucket_count() const noexcept { return hdr().cap; }
 
   double load_factor() const noexcept {
-    return cap_ ? double(size_) / double(cap_) : 0.0;
+    return hdr().cap ? double(hdr().size) / double(hdr().cap) : 0.0;
   }
 
   iterator begin() noexcept { return {this, next_full(0)}; }
 
-  iterator end() noexcept { return {this, cap_}; }
+  iterator end() noexcept { return {this, hdr().cap}; }
 
   const_iterator begin() const noexcept { return {this, next_full(0)}; }
 
-  const_iterator end() const noexcept { return {this, cap_}; }
+  const_iterator end() const noexcept { return {this, hdr().cap}; }
 
   template <class Q>
   iterator find(const Q& key) noexcept {
     size_t i = find_index(key, hash_of(key));
-    return {this, i == kNpos ? cap_ : i};
+    return {this, i == kNpos ? hdr().cap : i};
   }
 
   template <class Q>
   const_iterator find(const Q& key) const noexcept {
     size_t i = find_index(key, hash_of(key));
-    return {this, i == kNpos ? cap_ : i};
+    return {this, i == kNpos ? hdr().cap : i};
   }
 
   template <class Q>
@@ -245,7 +269,7 @@ class HashTable {
 
   // Makes room for n elements without rehashing.
   void reserve(size_t n) {
-    if (n <= size_ + growth_left_) {
+    if (n <= hdr().size + hdr().growth_left) {
       return;
     }
     size_t cap = detail::kGroup;
@@ -270,7 +294,7 @@ class HashTable {
     T tmp(yasl::forward<Args>(args)...);
     size_t i = prepare_insert(h);
     yasl::construct_at(slot(i), yasl::move(tmp));
-    ++size_;
+    ++hdr().size;
     return {iterator(this, i), true};
   }
 
@@ -295,7 +319,7 @@ class HashTable {
   template <class Pred>
   size_t erase_if(Pred pred) {
     size_t removed = 0;
-    for (size_t i = next_full(0); i < cap_; i = next_full(i + 1)) {
+    for (size_t i = next_full(0); i < hdr().cap; i = next_full(i + 1)) {
       if (pred(*slot(i))) {
         erase_index(i);
         ++removed;
@@ -313,20 +337,15 @@ class HashTable {
   // Destroys the elements, keeps the memory.
   void clear() noexcept {
     destroy_all();
-    if (cap_) {
-      yasl::mem_set(ctrl_, detail::kEmpty, cap_ + detail::kGroup);
-      growth_left_ = detail::max_items(cap_);
+    if (hdr().cap) {
+      yasl::mem_set(ctrl_, detail::kEmpty, hdr().cap + detail::kGroup);
+      hdr().growth_left = detail::max_items(hdr().cap);
+      hdr().size = 0;
     }
-    size_ = 0;
   }
 
   void swap(HashTable& other) noexcept {
-    yasl::swap(slots_, other.slots_);
     yasl::swap(ctrl_, other.ctrl_);
-    yasl::swap(cap_, other.cap_);
-    yasl::swap(size_, other.size_);
-    yasl::swap(growth_left_, other.growth_left_);
-    yasl::swap(res_, other.res_);
     yasl::swap(hash_, other.hash_);
     yasl::swap(eq_, other.eq_);
   }
@@ -335,7 +354,7 @@ class HashTable {
   friend bool operator==(const HashTable& a, const HashTable& b)
     requires EqualityComparable<T>
   {
-    if (a.size_ != b.size_) {
+    if (a.hdr().size != b.hdr().size) {
       return false;
     }
     for (const T& v : a) {
@@ -349,21 +368,21 @@ class HashTable {
 
   // Checks every structural invariant. Meant for tests and debugging.
   bool validate() const noexcept {
-    if (cap_ == 0) {
-      return size_ == 0 && !ctrl_;
+    if (hdr().cap == 0) {
+      return hdr().size == 0;
     }
-    if ((cap_ & (cap_ - 1)) != 0 || cap_ < detail::kGroup) {
+    if ((hdr().cap & (hdr().cap - 1)) != 0 || hdr().cap < detail::kGroup) {
       return false;
     }
     size_t full = 0;
     size_t deleted = 0;
-    for (size_t i = 0; i < cap_ + detail::kGroup; ++i) {
-      size_t home = i < cap_ ? i : i - cap_;
+    for (size_t i = 0; i < hdr().cap + detail::kGroup; ++i) {
+      size_t home = i < hdr().cap ? i : i - hdr().cap;
       if (ctrl_[i] != ctrl_[home]) {
         return false;
       }
     }
-    for (size_t i = 0; i < cap_; ++i) {
+    for (size_t i = 0; i < hdr().cap; ++i) {
       uint8 c = ctrl_[i];
       if (c == detail::kDeleted) {
         ++deleted;
@@ -378,15 +397,15 @@ class HashTable {
         }
       }
     }
-    return full == size_ &&
-           growth_left_ == detail::max_items(cap_) - full - deleted;
+    return full == hdr().size &&
+           hdr().growth_left == detail::max_items(hdr().cap) - full - deleted;
   }
 
  protected:
   static const key_type& key_of(const T& v) noexcept { return KeyOf{}(v); }
 
   T* slot(size_t i) const noexcept {
-    return yasl::launder(reinterpret_cast<T*>(slots_) + i);
+    return yasl::launder(reinterpret_cast<T*>(slots_base()) + i);
   }
 
   template <class Q>
@@ -398,28 +417,28 @@ class HashTable {
     ctrl_[i] = c;
     // The first group is mirrored after the end so that unaligned group loads
     // wrap around.
-    ctrl_[((i - detail::kGroup) & (cap_ - 1)) + detail::kGroup] = c;
+    ctrl_[((i - detail::kGroup) & (hdr().cap - 1)) + detail::kGroup] = c;
   }
 
-  // First full slot at index >= i, or cap_.
+  // First full slot at index >= i, or hdr().cap.
   size_t next_full(size_t i) const noexcept {
-    while (i < cap_) {
+    while (i < hdr().cap) {
       uint64 m = detail::match_full(detail::load_group(ctrl_ + i));
       if (m) {
         size_t r = i + detail::first_byte(m);
-        return r < cap_ ? r : cap_;
+        return r < hdr().cap ? r : hdr().cap;
       }
       i += detail::kGroup;
     }
-    return cap_;
+    return hdr().cap;
   }
 
   template <class Q>
   size_t find_index(const Q& key, uint64 h) const noexcept {
-    if (cap_ == 0) {
+    if (hdr().cap == 0) {
       return kNpos;
     }
-    const size_t mask = cap_ - 1;
+    const size_t mask = hdr().cap - 1;
     const uint8 h2 = uint8(h >> 57);
     size_t pos = size_t(h) & mask;
     size_t stride = 0;
@@ -441,7 +460,7 @@ class HashTable {
 
   // First empty or deleted slot on the probe sequence of h.
   size_t find_free(uint64 h) const noexcept {
-    const size_t mask = cap_ - 1;
+    const size_t mask = hdr().cap - 1;
     size_t pos = size_t(h) & mask;
     size_t stride = 0;
     for (;;) {
@@ -457,17 +476,18 @@ class HashTable {
   // Picks (and marks as full) the slot for a new element with hash h, growing
   // if needed.
   size_t prepare_insert(uint64 h) {
-    if (cap_ == 0) {
+    if (hdr().cap == 0) {
       rehash(detail::kGroup);
     }
     size_t i = find_free(h);
-    if (ctrl_[i] == detail::kEmpty && growth_left_ == 0) {
+    if (ctrl_[i] == detail::kEmpty && hdr().growth_left == 0) {
       // Out of room: drop tombstones if they are most of the load, else double.
-      rehash(size_ * 2 >= detail::max_items(cap_) ? cap_ * 2 : cap_);
+      rehash(hdr().size * 2 >= detail::max_items(hdr().cap) ? hdr().cap * 2
+                                                            : hdr().cap);
       i = find_free(h);
     }
     if (ctrl_[i] == detail::kEmpty) {
-      --growth_left_;
+      --hdr().growth_left;
     }
     set_ctrl(i, uint8(h >> 57));
     return i;
@@ -475,11 +495,11 @@ class HashTable {
 
   void erase_index(size_t i) noexcept {
     yasl::destroy_at(slot(i));
-    --size_;
+    --hdr().size;
     // A probe sequence can only have skipped this slot if a whole group around
     // it is occupied; then it must stay a tombstone.
     uint64 before = detail::match_empty(
-        detail::load_group(ctrl_ + ((i - detail::kGroup) & (cap_ - 1))));
+        detail::load_group(ctrl_ + ((i - detail::kGroup) & (hdr().cap - 1))));
     uint64 after = detail::match_empty(detail::load_group(ctrl_ + i));
     size_t lead = before ? size_t(__builtin_clzll(before)) / 8 : detail::kGroup;
     size_t trail = after ? detail::first_byte(after) : detail::kGroup;
@@ -487,60 +507,76 @@ class HashTable {
       set_ctrl(i, detail::kDeleted);
     } else {
       set_ctrl(i, detail::kEmpty);
-      ++growth_left_;
+      ++hdr().growth_left;
     }
   }
 
-  void allocate_table(size_t cap) {
+  // Allocates a block with an empty table of `cap` slots; returns its control
+  // bytes.
+  static uint8* allocate_block(size_t cap, mem::Resource* res) {
     if (cap > max_value<size_t>() / 2 / (sizeof(T) + 1)) {
       throw LengthError("yasl::HashTable: too large");
     }
     size_t slot_bytes = cap * sizeof(T);
-    void* mem =
-        res_->allocate(slot_bytes + cap + detail::kGroup, table_align());
-    slots_ = static_cast<unsigned char*>(mem);
-    ctrl_ = slots_ + slot_bytes;
-    cap_ = cap;
-    yasl::mem_set(ctrl_, detail::kEmpty, cap + detail::kGroup);
-    size_ = 0;
-    growth_left_ = detail::max_items(cap);
+    auto* mem = static_cast<unsigned char*>(res->allocate(
+        slot_bytes + sizeof(detail::TableHeader) + cap + detail::kGroup,
+        table_align()));
+    uint8* ctrl = mem + slot_bytes + sizeof(detail::TableHeader);
+    ::new (ctrl - sizeof(detail::TableHeader))
+        detail::TableHeader{cap, 0, detail::max_items(cap), res};
+    yasl::mem_set(ctrl, detail::kEmpty, cap + detail::kGroup);
+    return ctrl;
   }
 
   static constexpr size_t table_align() noexcept {
     return alignof(T) > alignof(uint64) ? alignof(T) : alignof(uint64);
   }
 
+  static uint8* empty_ctrl() noexcept { return detail::kEmptyBlock.ctrl; }
+
+  bool has_block() const noexcept { return ctrl_ != empty_ctrl(); }
+
+  detail::TableHeader& hdr() const noexcept {
+    return *reinterpret_cast<detail::TableHeader*>(ctrl_ -
+                                                   sizeof(detail::TableHeader));
+  }
+
+  unsigned char* slots_base() const noexcept {
+    return ctrl_ - sizeof(detail::TableHeader) - hdr().cap * sizeof(T);
+  }
+
+  // Releases the block (the elements must already be gone) and goes back to
+  // the shared empty table.
   void free_table() noexcept {
-    if (slots_) {
-      res_->deallocate(slots_, cap_ * sizeof(T) + cap_ + detail::kGroup,
-                       table_align());
-      slots_ = nullptr;
-      ctrl_ = nullptr;
-      cap_ = 0;
-      growth_left_ = 0;
+    if (has_block()) {
+      const detail::TableHeader h = hdr();
+      h.res->deallocate(slots_base(),
+                        h.cap * sizeof(T) + sizeof(detail::TableHeader) +
+                            h.cap + detail::kGroup,
+                        table_align());
+      ctrl_ = empty_ctrl();
     }
   }
 
   void destroy_all() noexcept {
     if constexpr (!TriviallyDestructible<T>) {
-      for (size_t i = next_full(0); i < cap_; i = next_full(i + 1)) {
+      for (size_t i = next_full(0); i < hdr().cap; i = next_full(i + 1)) {
         yasl::destroy_at(slot(i));
       }
     }
   }
 
   void rehash(size_t new_cap) {
-    HashTable fresh(res_, hash_, eq_);
-    fresh.allocate_table(new_cap);
-    for (size_t i = next_full(0); i < cap_; i = next_full(i + 1)) {
+    HashTable fresh(hash_, eq_);
+    fresh.ctrl_ = allocate_block(new_cap, resource());
+    for (size_t i = next_full(0); i < hdr().cap; i = next_full(i + 1)) {
       uint64 h = hash_of(key_of(*slot(i)));
       size_t j = fresh.find_free(h);
       fresh.set_ctrl(j, uint8(h >> 57));
       fresh.move_into(j, slot(i));
     }
-    fresh.size_ = size_;
-    fresh.growth_left_ = detail::max_items(new_cap) - size_;
-    size_ = 0;
+    fresh.hdr().size = hdr().size;
+    fresh.hdr().growth_left = detail::max_items(new_cap) - hdr().size;
     swap(fresh);
     // `fresh` now holds the old block whose elements were moved out.
     fresh.free_table();
@@ -551,12 +587,10 @@ class HashTable {
     yasl::destroy_at(src);
   }
 
-  unsigned char* slots_ = nullptr;
-  uint8* ctrl_ = nullptr;
-  size_t cap_ = 0;
-  size_t size_ = 0;
-  size_t growth_left_ = 0;
-  mem::Resource* res_;
+  HashTable(Hasher hash, Eq eq) noexcept
+      : ctrl_(empty_ctrl()), hash_(yasl::move(hash)), eq_(yasl::move(eq)) {}
+
+  uint8* ctrl_;
   [[no_unique_address]] Hasher hash_;
   [[no_unique_address]] Eq eq_;
 };

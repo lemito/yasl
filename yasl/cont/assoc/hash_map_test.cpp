@@ -200,3 +200,45 @@ YASL_TEST(hash_map_string_keys) {
   }
   CHECK_EQ(t.stats().live(), size_t(0));
 }
+
+YASL_TEST(hashmap_object_is_one_pointer) {
+  static_assert(sizeof(HashMap<int, int>) == sizeof(void*));
+  static_assert(sizeof(HashSet<uint64>) == sizeof(void*));
+  static_assert(sizeof(HashMap<String, String>) == sizeof(void*));
+
+  // On the default resource an empty map allocates nothing.
+  mem::Tracking t;
+  {
+    mem::ScopedDefault scope(&t);
+    HashMap<int, int> m;
+    CHECK_EQ(t.stats().allocations, size_t(0));
+    CHECK(m.empty());
+    CHECK(m.find(1) == m.end());
+    m.clear();
+    HashMap<int, int> copy = m;
+    CHECK(copy.empty());
+    CHECK(m == copy);
+  }
+  // A map on its own resource keeps it in a header block.
+  mem::Tracking up;
+  mem::Tracking own;
+  {
+    mem::ScopedDefault scope(&up);
+    HashMap<int, int> m(&own);
+    CHECK_EQ(own.stats().allocations, size_t(1));
+    CHECK(m.resource() == static_cast<mem::Resource*>(&own));
+    for (int i = 0; i < 100; ++i) {
+      m[i] = i;
+    }
+    CHECK(m.resource() == static_cast<mem::Resource*>(&own));
+    HashMap<int, int> moved = std::move(m);
+    CHECK_EQ(moved.size(), size_t(100));
+    CHECK(moved.resource() == static_cast<mem::Resource*>(&own));
+    CHECK(m.empty());
+    m[1] = 2;  // a moved-from map is usable, on the default resource
+    CHECK(m.resource() == static_cast<mem::Resource*>(&up));
+    CHECK(moved.validate());
+  }
+  CHECK_EQ(own.stats().live(), size_t(0));
+  CHECK_EQ(up.stats().live(), size_t(0));
+}
