@@ -45,13 +45,20 @@ cmake -S . -B build-bench -DCMAKE_BUILD_TYPE=Release -DYASL_BUILD_BENCH=ON && cm
 
 | Модуль | Что внутри |
 |---|---|
-| `yasl/sys` | type traits и концепты на builtins, `move/forward/swap`, `Optional`, `Result`, `Function`, `Variant`+`match`, `defer`, `checked_*`, `sort`, `Duration`/`Instant`/`SystemTime`, `Random` (xoshiro256**), `env::var`/`env::args`, `Thread`, `Atomic<T>`, `WaitGroup`/`Latch`/`ThreadPool`/`Future`, `Guarded<T>`/`RwLock<T>`/`CondVar`/`Once`/`OnceLock`/`Lazy`, `Channel` (`make_channel`), `Pair`, `Span`, `Less`, алгоритмы, исключения, хеш, `Mutex` (pthread) |
-| `yasl/mem` | `Resource`, `Arena`, `InlineArena<N>`, `Pool`, `Tracking`, `Synchronized<R>` |
-| `yasl/vec` | `Deque<T>`, `SmallVector<T, N>`, `PriorityQueue<T, Cmp>`, `BitSet`, `Vector<T>` (+ `retain`, `dedup`, `sort`, `sort_by_key`, `contains`, `index_of`, `first`/`last`, `extend`, `drain`, `split_off`, `chunks`/`windows`) |
-| `yasl/str` | `StringView`, `String` (copy-on-write), `StringBuilder`, `num` — числа ⇄ текст |
-| `yasl/io` | `Output`/`Input`, форматирование `format("{}")`, файлы, строковые потоки, `out()/err()/in()` |
-| `yasl/map` | `HashMap/HashSet` (`hash_map.h`), `BTreeMap/BTreeSet`, `TreapMap/TreapSet`, `Trie<V>` |
-| `yasl/ptr` | `Unique<T>`, `Shared<T>` + `Weak<T>` (`Arc` — устаревший алиас) |
+| `yasl/core` | `traits.h` (traits и концепты на builtins), `utility.h` (`move/forward/swap`, `Pair`, `Less`), `types.h`, `exception.h`, `check.h` (`YASL_ASSERT`/`YASL_VERIFY`/`YASL_INSIST`/`panic`), `bits.h`, `math.h` (`checked_*`, `saturating_*`), `hash.h`, `span.h` |
+| `yasl/vocab` | `Optional`, `Result`, `Variant`+`match`, `Function`/`FunctionRef`, `defer` |
+| `yasl/algo` | `sort`, `stable_sort`, `binary_search`, …; ленивые адаптеры `iter.h` |
+| `yasl/conc` | `Mutex`, `CondVar`, `Once`/`OnceLock`/`Lazy`, `Guarded<T>`/`RwLock<T>`, `Thread`, `ThreadPool`/`Future`/`WaitGroup`/`Latch`, `Channel`, `Semaphore`/`Barrier`, `Atomic<T>`, `RefCount` |
+| `yasl/time` | `Duration`, `Instant`, `SystemTime` |
+| `yasl/rand` | `Random` (xoshiro256**), `Pcg32`/`Pcg64` |
+| `yasl/os` | `Fd`/`Pipe`/`create_memfd`, `env::var`/`env::args` |
+| `yasl/mem` | `Resource`, `Arena`, `InlineArena<N>`, `Pool`, `ObjPool` (объекты одной группы умирают вместе), `Tracking`, `Synchronized<R>` |
+| `yasl/cont/seq` | `Vector<T>` (+ `retain`, `dedup`, `sort`, `sort_by_key`, `contains`, `index_of`, `first`/`last`, `extend`, `drain`, `split_off`, `chunks`/`windows`), `Deque<T>`, `SmallVector<T, N>`, `List<T>`, `IntrusiveList<T>`, `BitSet` |
+| `yasl/cont/adapter` | `Stack<T, C>`, `Queue<T, C>`, `PriorityQueue<T, Cmp>` |
+| `yasl/str` | `Symbol`/`SymbolTable` (интернирование), `StringView`, `String` (copy-on-write), `StringBuilder`, `num` — числа ⇄ текст |
+| `yasl/io` | `Output`/`Input`, форматирование `format("{}")`, файлы, `copy`, `LimitedInput`, `TeeOutput`, `Buffer`, строковые потоки, `out()/err()/in()` |
+| `yasl/cont/assoc` | `HashMap/HashSet` (`hash_map.h`), `BTreeMap/BTreeSet`, `TreapMap/TreapSet`, `Trie<V>`, `StringMap<V>`/`StringSet` |
+| `yasl/ptr` | `Unique<T>`, `Shared<T>` + `Weak<T>` (`Arc` — устаревший алиас), `IntrusivePtr<T>` + `RefCounted<T>` |
 | `yasl/compat` | мост к std: `mem::Allocator<T>`, pmr-адаптеры, `std::hash`, `std::formatter`, `std::ostream` |
 
 ## Память
@@ -108,7 +115,7 @@ TreapMap<int, int> tail; t.split(100, tail);
 
 ### HashMap / HashSet
 
-`#include <yasl/map/hash_map.h>`. Открытая адресация в стиле Swiss table (control-байты, группы по 8 через SWAR,
+`#include <yasl/cont/assoc/hash_map.h>`. Открытая адресация в стиле Swiss table (control-байты, группы по 8 через SWAR,
 максимальная загрузка 7/8), одна аллокация на таблицу, хеш смешивается со случайным seed процесса (HashDoS).
 Порядка нет, итераторы инвалидируются при rehash. API как у `MapOps`/`SetOps` плюс `reserve`, `load_factor`,
 `erase_if(pred)`, `retain(pred)`; поиск гетерогенный: `m.get("k"_sv)`.
@@ -117,6 +124,28 @@ TreapMap<int, int> tail; t.split(100, tail);
 HashMap<String, int> counts;
 counts["x"] += 1;
 counts.retain([](auto& e) { return e.value > 1; });
+```
+
+### Списки, адаптеры, строковый словарь
+
+```cpp
+List<int> l = {3, 1, 2};  l.sort();  other.splice(other.end(), l);      // splice за O(1)
+IntrusiveList<Job> queue;  queue.push_back(job);                        // без аллокаций, auto-unlink
+Stack<int, List<int>> s;   s.push(1);  Optional<int> top = s.pop();     // любой подходящий контейнер
+StringMap<int> m;  m["apple"] = 1;
+for (auto& [key, value] : m.with_prefix("app")) { /* лексикографически */ }
+```
+
+`IntrusiveList::size()` — O(n): элемент с auto-unlink может уйти из списка сам. Ключ в `StringMap` не хранится
+целиком, поэтому `key` при итерации — `StringView` в буфере итератора (валиден до следующего шага).
+
+### ObjPool, интрузивные указатели
+
+```cpp
+mem::ObjPool pool;
+Node* a = pool.make<Node>(1);                // деструкторы — в обратном порядке, одним вызовом
+StringView name = pool.copy_str("text");
+IntrusivePtr<Job> j = make_intrusive<Job>(); // sizeof == sizeof(void*), Job: RefCounted<Job>
 ```
 
 ### Строки
@@ -144,7 +173,7 @@ String s = sb.take();      // без копирования
 String t = format("{}-{:03}", "x", 7);
 ```
 
-### Ленивые адаптеры (`yasl/sys/iter.h`)
+### Ленивые адаптеры (`yasl/algo/iter.h`)
 
 ```cpp
 using namespace yasl::iter;
@@ -232,4 +261,5 @@ out << fmt::grouped(1000000) << ' ' << fmt::bytes(1536) << ' ' << fmt::percent(0
 
 Свой мини-фреймворк в `yasl/test` (сам написан на yasl). В тестах std используется только как эталон
 для сравнения (`std::map`, `to_chars`/`from_chars`) и в тестах совместимости.
+Стиль — Google (`.clang-format` в корне): `clang-format -i` перед коммитом.
 Проверено на clang 18 (ASan+UBSan, TSan) и GCC 15 (Release, `-Werror`).

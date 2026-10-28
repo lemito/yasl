@@ -35,3 +35,20 @@
 2026-10-27 8.3 CI (GitHub Actions: clang ASan+UBSan, clang TSan, GCC Release -Werror, include-policy, install) — коммит "Add GitHub Actions CI"
 2026-10-27 8.4 Бенчмарки yasl/bench (YASL_BUILD_BENCH) — коммит "Add benchmarks"
 2026-10-27 6.4 Path и fs (dirent.h, stdio.h добавлены в ALLOWED) — коммит "Add Path and fs"
+2026-10-27 8.1 pImpl где возможно: Mutex/RawRwLock/CondVar/Thread без pthread.h в заголовках, FileOutput/FileInput на Unique<Impl>; Arena/Pool/Tracking/шаблоны не трогались (см. TODO) — не закоммичено
+2026-10-27 10.1 mem::ObjPool + бенчмарк (6.8 ns/op против 16.4 у new/delete) — не закоммичено
+2026-10-27 10.2 IntrusivePtr/RefCounted — не закоммичено
+2026-10-27 11.1 List<T> — не закоммичено
+2026-10-27 11.2 IntrusiveList<T, Node, Member> (auto-unlink) — не закоммичено
+2026-10-27 11.3 Stack<T,C>/Queue<T,C> — не закоммичено
+2026-10-27 11.4 StringMap/StringSet на Trie (итераторы, with_prefix); radix-оптимизация отложена — не закоммичено
+2026-10-27 12.1 Input::read_exact/consume, io::copy — не закоммичено
+2026-10-27 12.2 LimitedInput, TeeOutput — не закоммичено
+2026-10-27 12.3 io::Buffer — не закоммичено
+2026-10-27 13.1 Fd (File переведён на Fd), io::Error вынесен в io/error.h — не закоммичено
+2026-10-27 13.2 Pipe, create_memfd (sys/mman.h в ALLOWED) — не закоммичено
+2026-10-27 13.3 Semaphore, Barrier — не закоммичено
+2026-10-27 14.1-14.2 YASL_VERIFY/YASL_INSIST/YASL_PANIC, panic с backtrace (execinfo.h в ALLOWED), set_panic_hook, CHECK_PANICS — не закоммичено
+2026-10-27 15.1 Pcg32/Pcg64 (проверены на эталонных векторах) — не закоммичено
+2026-10-27 15.2 SymbolTable/Symbol — не закоммичено
+2026-10-27 Style: .clang-format (Google), все исходники переформатированы
