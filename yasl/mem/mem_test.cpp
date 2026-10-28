@@ -3,6 +3,7 @@
 #include <yasl/cont/seq/vector.h>
 #include <yasl/mem/arena.h>
 #include <yasl/mem/compose.h>
+#include <yasl/mem/frame.h>
 #include <yasl/mem/pool.h>
 #include <yasl/mem/sync.h>
 #include <yasl/mem/sys.h>
@@ -419,3 +420,47 @@ YASL_TEST(compose_as_resource_and_sizes) {
   mem::AsResource<mem::StackBuffer<16>> tiny;
   CHECK_THROWS(tiny.allocate(64), BadAlloc);
 }
+
+YASL_TEST(frame_stack_first) {
+  mem::Tracking up;
+  {
+    mem::ScopedDefault outer(&up);
+    mem::Frame<4096> f;
+    CHECK(mem::default_resource() == f.resource());
+    {
+      Vector<int> v;
+      for (int i = 0; i < 100; ++i) {
+        v.push_back(i);
+      }
+      CHECK_EQ(v[99], 99);
+      CHECK(f.used() > 0);
+    }
+    CHECK_EQ(up.stats().allocations, size_t(0));  // all on the stack
+  }
+  CHECK(mem::default_resource() != &up);
+}
+
+YASL_TEST(frame_overflow_goes_upstream) {
+  mem::Tracking up;
+  {
+    mem::ScopedDefault outer(&up);
+    mem::Frame<256> f;
+    Vector<int> v;
+    for (int i = 0; i < 1000; ++i) {
+      v.push_back(i);
+    }
+    CHECK(up.stats().allocations > 0);
+    CHECK_EQ(v[999], 999);
+  }
+  CHECK_EQ(up.stats().live(), size_t(0));
+}
+
+#ifndef NDEBUG
+YASL_TEST(frame_detects_escaped_block) {
+  mem::Frame<256> f;
+  void* leaked = f.resource()->allocate(16);
+  CHECK_PANICS(f.verify_no_live());
+  f.resource()->deallocate(leaked, 16);
+  f.verify_no_live();
+}
+#endif

@@ -271,3 +271,5 @@ out << fmt::grouped(1000000) << ' ' << fmt::bytes(1536) << ' ' << fmt::percent(0
 `yasl_sys_alloc / yasl_sys_free / yasl_sys_resize / yasl_sys_good_size` (сигнатуры — в `yasl/mem/sys_custom.cpp`),
 так подключаются jemalloc, mimalloc и т. п. `allocate_at_least()` возвращает реальный размер блока.
 Ветка Windows (`_aligned_malloc`) написана, но без Windows-CI не проверена (см. 9.1).
+
+`mem::Frame<4096> f;` — на время области все контейнеры без явного ресурса сначала берут память из буфера на стеке, при переполнении — из прежнего ресурса по умолчанию. Объекты не должны пережить `Frame` (в Debug — паника).
