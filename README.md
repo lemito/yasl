@@ -57,7 +57,7 @@ cmake -S . -B build-bench -DCMAKE_BUILD_TYPE=Release -DYASL_BUILD_BENCH=ON && cm
 | `yasl/cont/adapter` | `Stack<T, C>`, `Queue<T, C>`, `PriorityQueue<T, Cmp>` |
 | `yasl/str` | `Symbol`/`SymbolTable` (интернирование), `StringView`, `String` (copy-on-write), `StringBuilder`, `num` — числа ⇄ текст |
 | `yasl/io` | `Output`/`Input`, форматирование `format("{}")`, файлы, `copy`, `LimitedInput`, `TeeOutput`, `Buffer`, строковые потоки, `out()/err()/in()` |
-| `yasl/cont/assoc` | `HashMap/HashSet` (`hash_map.h`), `BTreeMap/BTreeSet`, `TreapMap/TreapSet`, `Trie<V>`, `StringMap<V>`/`StringSet` |
+| `yasl/cont/assoc` | `HashMap/HashSet` (`hash_map.h`), `BTreeMap/BTreeSet`, `TreapMap/TreapSet`, `Trie<V>`, `RadixTrie<V>` (со сжатием путей), `StringMap<V>`/`StringSet` (на `RadixTrie`; `StringMap<V, Trie<V>>` — без сжатия) |
 | `yasl/ptr` | `Unique<T>`, `Shared<T>` + `Weak<T>` (`Arc` — устаревший алиас), `IntrusivePtr<T>` + `RefCounted<T>` |
 | `yasl/compat` | мост к std: `mem::Allocator<T>`, pmr-адаптеры, `std::hash`, `std::formatter`, `std::ostream` |
 

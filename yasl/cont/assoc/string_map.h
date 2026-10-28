@@ -1,6 +1,7 @@
 #pragma once
 
 #include "map.h"
+#include "radix_trie.h"
 #include "trie.h"
 
 namespace yasl {
@@ -9,7 +10,8 @@ struct Empty {
   friend bool operator==(Empty, Empty) noexcept { return true; }
 };
 
-// Ordered map from strings to V on a prefix tree. The interface matches
+// Ordered map from strings to V on a prefix tree (RadixTrie by default; pass
+// Trie<V> for the uncompressed variant). The interface matches
 // BTreeMap and TreapMap (try_emplace, insert_or_assign, find, get, operator[],
 // erase, ...), except that the key is not stored whole, so iteration yields a
 // proxy {StringView key, V& value} and `key` is valid only until the iterator
@@ -20,13 +22,13 @@ struct Empty {
 //     m["apply"] = 2;
 //     for (auto& [key, value] : m) { ... }               // lexicographic order
 //     for (auto& [key, value] : m.with_prefix("appl")) { ... }
-template <class V>
-class StringMap : public MapOps<StringMap<V>, V> {
+template <class V, class T = RadixTrie<V>>
+class StringMap : public MapOps<StringMap<V, T>, V> {
  public:
   using key_type = StringView;
   using mapped_type = V;
-  using iterator = typename Trie<V>::iterator;
-  using const_iterator = typename Trie<V>::const_iterator;
+  using iterator = typename T::iterator;
+  using const_iterator = typename T::const_iterator;
 
   StringMap() = default;
   explicit StringMap(mem::Resource* res) : t_(res) {}
@@ -54,6 +56,10 @@ class StringMap : public MapOps<StringMap<V>, V> {
   const_iterator find(StringView key) const { return t_.find_iter(key); }
 
   bool contains(StringView key) const noexcept { return t_.contains(key); }
+
+  // Direct lookup: skips building an iterator.
+  V* get(StringView key) noexcept { return t_.find(key); }
+  const V* get(StringView key) const noexcept { return t_.find(key); }
 
   // Used by MapOps: `lookup` is the key, `ignored` is the same key in the
   // caller's type.
@@ -87,7 +93,7 @@ class StringMap : public MapOps<StringMap<V>, V> {
   friend void swap(StringMap& a, StringMap& b) noexcept { a.swap(b); }
 
  private:
-  Trie<V> t_;
+  T t_;
 };
 
 // Ordered set of strings; iteration yields the same {key, value} proxy as
