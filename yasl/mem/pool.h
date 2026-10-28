@@ -49,18 +49,15 @@ class Pool : public Resource {
     size_t size;
   };
 
-  struct SizeClass {
-    FreeNode* free = nullptr;
-    char* cur = nullptr;
-    char* end = nullptr;
-  };
-
   size_t class_of(size_t size, size_t align) const noexcept;
-  void refill(SizeClass& c, size_t block);
+  void refill(size_t block);
 
   Resource* upstream_;
   Options opts_;
   Slab* slabs_ = nullptr;
-  SizeClass classes_[kMaxClasses];
+  // Fresh blocks of every class are carved from the newest slab.
+  char* cur_ = nullptr;
+  char* end_ = nullptr;
+  FreeNode* free_[kMaxClasses] = {};
 };
 }  // namespace yasl::mem

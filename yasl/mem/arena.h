@@ -32,8 +32,8 @@ class Arena : public Resource {
   // Bytes handed out since the last release()/reset().
   size_t used() const noexcept { return used_; }
 
-  // Bytes currently held from upstream.
-  size_t reserved() const noexcept { return reserved_; }
+  // Bytes currently held from upstream (sums the chunks).
+  size_t reserved() const noexcept;
 
   Resource* upstream() const noexcept { return upstream_; }
 
@@ -56,7 +56,6 @@ class Arena : public Resource {
   Chunk* chunks_ = nullptr;
   BumpRegion region_;
   size_t used_ = 0;
-  size_t reserved_ = 0;
 };
 
 namespace detail {

@@ -27,17 +27,25 @@ Block Pool::do_alloc(size_t size, size_t align) {
     return upstream_->allocate_at_least(size, align);
   }
   size_t block = kMinBlock << idx;
-  SizeClass& c = classes_[idx];
-  if (c.free) {
-    FreeNode* n = c.free;
-    c.free = n->next;
+  if (FreeNode* n = free_[idx]) {
+    free_[idx] = n->next;
     return {n, block};
   }
-  if (size_t(c.end - c.cur) < block) {
-    refill(c, block);
+  // Blocks are aligned to their size (up to kMaxAlign).
+  size_t balign = block < kMaxAlign ? block : kMaxAlign;
+  auto fits = [&] {
+    return cur_ &&
+           size_t(end_ - cur_) >=
+               block + (align_up(reinterpret_cast<uintptr_t>(cur_), balign) -
+                        reinterpret_cast<uintptr_t>(cur_));
+  };
+  if (!fits()) {
+    refill(block);
   }
-  void* p = c.cur;
-  c.cur += block;
+  cur_ = reinterpret_cast<char*>(
+      align_up(reinterpret_cast<uintptr_t>(cur_), balign));
+  void* p = cur_;
+  cur_ += block;
   return {p, block};
 }
 
@@ -47,17 +55,16 @@ void Pool::do_free(void* ptr, size_t size, size_t align) noexcept {
     upstream_->deallocate(ptr, size, align);
     return;
   }
-  SizeClass& c = classes_[idx];
-  c.free = ::new (ptr) FreeNode{c.free};
+  free_[idx] = ::new (ptr) FreeNode{free_[idx]};
 }
 
-void Pool::refill(SizeClass& c, size_t block) {
+void Pool::refill(size_t block) {
   size_t header = align_up(sizeof(Slab), kMaxAlign);
   size_t want = yasl::max(opts_.slab_size, header + block * 4);
   Block b = upstream_->allocate_at_least(want, kMaxAlign);
   slabs_ = ::new (b.ptr) Slab{slabs_, b.size};
-  c.cur = static_cast<char*>(b.ptr) + header;
-  c.end = c.cur + (b.size - header) / block * block;
+  cur_ = static_cast<char*>(b.ptr) + header;
+  end_ = static_cast<char*>(b.ptr) + b.size;
 }
 
 void Pool::release() noexcept {
@@ -66,8 +73,9 @@ void Pool::release() noexcept {
     upstream_->deallocate(slabs_, slabs_->size, kMaxAlign);
     slabs_ = next;
   }
-  for (SizeClass& c : classes_) {
-    c = SizeClass{};
+  cur_ = end_ = nullptr;
+  for (FreeNode*& f : free_) {
+    f = nullptr;
   }
 }
 }  // namespace yasl::mem

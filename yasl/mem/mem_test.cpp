@@ -465,3 +465,10 @@ YASL_TEST(frame_detects_escaped_block) {
   f.verify_no_live();
 }
 #endif
+
+YASL_TEST(mem_object_sizes) {
+  // A Pool keeps one free list per class and one shared bump region.
+  static_assert(sizeof(mem::Pool) <= 8 + 8 + 16 + 8 + 16 + 28 * 8);
+  static_assert(sizeof(mem::Arena) <= 8 + 8 + 16 + 8 + 8 + 24 + 8);
+  static_assert(sizeof(mem::InlineArena<256>) - 256 <= sizeof(mem::Arena) + 16);
+}

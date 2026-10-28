@@ -50,8 +50,15 @@ void Arena::grow(size_t size, size_t align) {
       upstream_->allocate_at_least(yasl::max(next_chunk_, need), kMaxAlign);
   chunks_ = ::new (b.ptr) Chunk{chunks_, b.size};
   region_ = BumpRegion(static_cast<char*>(b.ptr) + header, b.size - header);
-  reserved_ += b.size;
   next_chunk_ = yasl::min(yasl::max(next_chunk_, need) * 2, kMaxChunk);
+}
+
+size_t Arena::reserved() const noexcept {
+  size_t total = 0;
+  for (const Chunk* c = chunks_; c; c = c->prev) {
+    total += c->size;
+  }
+  return total;
 }
 
 void Arena::release() noexcept {
@@ -62,7 +69,6 @@ void Arena::release() noexcept {
   }
   region_ = BumpRegion(initial_, initial_size_);
   used_ = 0;
-  reserved_ = 0;
 }
 
 void Arena::reset() noexcept {
@@ -82,6 +88,5 @@ void Arena::reset() noexcept {
   region_ =
       BumpRegion(reinterpret_cast<char*>(keep) + header, keep->size - header);
   used_ = 0;
-  reserved_ = keep->size;
 }
 }  // namespace yasl::mem

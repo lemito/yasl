@@ -503,7 +503,7 @@ template <class A> struct AllocHolder { [[no_unique_address]] A alloc_; };
 - [x] **16.5e pImpl без отдельной аллокации** (`yasl/io/file.{h,cpp}`): `FileOutput`/`FileInput` с `Unique<Impl>` на
   inline-хранилище фиксированного размера + `static_assert(sizeof(Impl) <= N)` в `.cpp` — тот же приём, что уже применён к
   `Mutex`/`CondVar` (см. «Открытые вопросы», 8.1). Поискать другие `Unique<Impl>` (`grep -rn "Unique<Impl>" yasl`).
-- [ ] **16.5f Сжатие `mem`**: `Pool::SizeClass` → `{free, cur}` + общая граница текущего слаба; у `Arena` убрать
+- [x] **16.5f Сжатие `mem`**: `Pool::SizeClass` → `{free, cur}` + общая граница текущего слаба; у `Arena` убрать
   `initial_`/`initial_size_` (стековый буфер — `StackBuffer` из 16.2); `used_`/`reserved_` — только под `YASL_MEM_STATS`
   (статистика и так есть в `Tracking`). `static_assert` на `sizeof(Pool)`, `sizeof(Arena)`, `sizeof(InlineArena<N>) - N`.
 
