@@ -1,7 +1,8 @@
 #include "resource.h"
 
-#include <stdlib.h>
 #include <yasl/core/check.h>
+
+#include "sys.h"
 
 namespace yasl::mem {
 namespace {
@@ -9,22 +10,16 @@ class SystemResource final : public Resource {
  protected:
   Block do_alloc(size_t size, size_t align) override {
     YASL_ASSERT(is_pow2(align));
-    if (size == 0) {
-      size = 1;
-    }
-    void* p = nullptr;
-    if (align <= kMaxAlign) {
-      p = ::malloc(size);
-    } else if (::posix_memalign(&p, align, size) != 0) {
-      p = nullptr;
-    }
-    if (!p) {
+    Block b = sys::alloc(size, align);
+    if (!b.ptr) {
       throw BadAlloc();
     }
-    return {p, size};
+    return b;
   }
 
-  void do_free(void* ptr, size_t, size_t) noexcept override { ::free(ptr); }
+  void do_free(void* ptr, size_t size, size_t align) noexcept override {
+    sys::free(ptr, size, align);
+  }
 };
 
 class NullResource final : public Resource {

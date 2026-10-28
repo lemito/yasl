@@ -4,6 +4,7 @@
 #include <yasl/mem/arena.h>
 #include <yasl/mem/pool.h>
 #include <yasl/mem/sync.h>
+#include <yasl/mem/sys.h>
 #include <yasl/mem/tracking.h>
 #include <yasl/test/test.h>
 
@@ -288,4 +289,39 @@ YASL_TEST(mem_synchronized_pool_threads) {
     }
   }
   CHECK_EQ(t.stats().live(), size_t(0));
+}
+
+YASL_TEST(sys_backend) {
+  mem::Block b = mem::sys::alloc(100, mem::kMaxAlign);
+  CHECK(b.ptr != nullptr);
+  CHECK(b.size >= 100);
+  CHECK(mem::sys::good_size(100) >= 100);
+  mem::sys::free(b.ptr, 100, mem::kMaxAlign);
+
+  for (size_t align : {size_t(64), size_t(4096)}) {
+    mem::Block a = mem::sys::alloc(300, align);
+    CHECK(a.ptr != nullptr);
+    CHECK_EQ(reinterpret_cast<size_t>(a.ptr) % align, size_t(0));
+    mem::sys::free(a.ptr, 300, align);
+  }
+
+  mem::Block g = mem::sys::alloc(16, mem::kMaxAlign);
+  static_cast<char*>(g.ptr)[0] = 42;
+  mem::Block r = mem::sys::resize(g.ptr, 16, 4096, mem::kMaxAlign);
+  if (r.ptr) {  // a backend may answer "cannot"
+    CHECK(r.size >= 4096);
+    CHECK_EQ(static_cast<char*>(r.ptr)[0], char(42));
+    mem::sys::free(r.ptr, 4096, mem::kMaxAlign);
+  } else {
+    mem::sys::free(g.ptr, 16, mem::kMaxAlign);
+  }
+}
+
+YASL_TEST(system_resource_reports_real_size) {
+  mem::Block b = mem::system_resource()->allocate_at_least(50);
+  CHECK(b.size >= 50);
+  mem::system_resource()->deallocate(b.ptr, 50);
+  mem::Block big = mem::system_resource()->allocate_at_least(10, 4096);
+  CHECK_EQ(reinterpret_cast<size_t>(big.ptr) % 4096, size_t(0));
+  mem::system_resource()->deallocate(big.ptr, 10, 4096);
 }

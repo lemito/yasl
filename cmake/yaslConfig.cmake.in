@@ -3,5 +3,8 @@
 include(CMakeFindDependencyMacro)
 find_dependency(Threads)
 
+# Set when yasl was built with YASL_MALLOC=tcmalloc.
+set(YASL_MALLOC "@YASL_MALLOC@")
+
 include("${CMAKE_CURRENT_LIST_DIR}/yaslTargets.cmake")
 check_required_components(yasl)

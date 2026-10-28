@@ -39,6 +39,34 @@ jobs:
       - name: Test
         run: cd build && ctest --output-on-failure
 
+  malloc-backends:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        malloc: [tcmalloc, custom]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tcmalloc
+        if: matrix.malloc == 'tcmalloc'
+        run: sudo apt-get update && sudo apt-get install -y libgoogle-perftools-dev
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DYASL_MALLOC=${{ matrix.malloc }}
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        run: cd build && ctest --output-on-failure
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        run: cd build && ctest --output-on-failure
+
   include-policy:
     runs-on: ubuntu-latest
     steps:

@@ -8,12 +8,21 @@ option(YASL_BUILD_TESTS "Build yasl tests" ${PROJECT_IS_TOP_LEVEL})
 option(YASL_BUILD_BENCH "Build the benchmarks (yasl/bench)" OFF)
 option(YASL_SANITIZE "Build with AddressSanitizer + UBSan" OFF)
 
+set(YASL_MALLOC "libc" CACHE STRING "System allocator behind yasl::mem: libc, tcmalloc or custom")
+set_property(CACHE YASL_MALLOC PROPERTY STRINGS libc tcmalloc custom)
+if(NOT YASL_MALLOC MATCHES "^(libc|tcmalloc|custom)$")
+    message(FATAL_ERROR "YASL_MALLOC must be libc, tcmalloc or custom (got '${YASL_MALLOC}')")
+endif()
+
 find_package(Threads REQUIRED)
 
 file(GLOB_RECURSE YASL_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/yasl/*.cpp)
 list(FILTER YASL_SOURCES EXCLUDE REGEX "_test\\.cpp$")
 list(FILTER YASL_SOURCES EXCLUDE REGEX "/yasl/test/")
 list(FILTER YASL_SOURCES EXCLUDE REGEX "/yasl/bench/")
+# Exactly one mem::sys backend is compiled.
+list(FILTER YASL_SOURCES EXCLUDE REGEX "/yasl/mem/sys_(libc|tcmalloc|custom)\\.cpp$")
+list(APPEND YASL_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/yasl/mem/sys_${YASL_MALLOC}.cpp)
 
 add_library(yasl STATIC ${YASL_SOURCES})
 add_library(yasl::yasl ALIAS yasl)
@@ -22,6 +31,14 @@ target_include_directories(yasl PUBLIC
     $<INSTALL_INTERFACE:include>)
 target_compile_features(yasl PUBLIC cxx_std_20)
 target_link_libraries(yasl PUBLIC Threads::Threads)
+
+if(YASL_MALLOC STREQUAL "tcmalloc")
+    find_library(YASL_TCMALLOC_LIB NAMES tcmalloc_minimal tcmalloc)
+    if(NOT YASL_TCMALLOC_LIB)
+        message(FATAL_ERROR "YASL_MALLOC=tcmalloc needs gperftools (e.g. apt install libgoogle-perftools-dev)")
+    endif()
+    target_link_libraries(yasl PUBLIC ${YASL_TCMALLOC_LIB})
+endif()
 
 if(MSVC)
     target_compile_options(yasl PRIVATE /W4)
@@ -56,6 +73,9 @@ if(YASL_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/yasl/*_test.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/yasl/test/*.cpp)
     add_executable(yasl_tests ${YASL_TEST_SOURCES})
+    if(YASL_MALLOC STREQUAL "custom")
+        target_compile_definitions(yasl_tests PRIVATE YASL_MALLOC_CUSTOM)
+    endif()
     target_link_libraries(yasl_tests PRIVATE yasl)
     if(NOT MSVC)
         target_compile_options(yasl_tests PRIVATE -Wall -Wextra)

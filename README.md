@@ -263,3 +263,11 @@ out << fmt::grouped(1000000) << ' ' << fmt::bytes(1536) << ' ' << fmt::percent(0
 для сравнения (`std::map`, `to_chars`/`from_chars`) и в тестах совместимости.
 Стиль — Google (`.clang-format` в корне): `clang-format -i` перед коммитом.
 Проверено на clang 18 (ASan+UBSan, TSan) и GCC 15 (Release, `-Werror`).
+
+## Системный аллокатор (`yasl::mem::sys`)
+
+Под всеми ресурсами лежит один бэкенд, выбираемый при сборке: `-DYASL_MALLOC=libc` (по умолчанию), `tcmalloc`
+(нужен gperftools) или `custom` — тогда программа сама определяет четыре `extern "C"` функции
+`yasl_sys_alloc / yasl_sys_free / yasl_sys_resize / yasl_sys_good_size` (сигнатуры — в `yasl/mem/sys_custom.cpp`),
+так подключаются jemalloc, mimalloc и т. п. `allocate_at_least()` возвращает реальный размер блока.
+Ветка Windows (`_aligned_malloc`) написана, но без Windows-CI не проверена (см. 9.1).

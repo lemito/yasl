@@ -319,6 +319,250 @@
   на пул), равные строки → равные символы, сравнение за O(1). Хранилище — `ObjPool::copy_str` + `HashMap`. Зависит от: 10.1.
   Альтернативная реализация на `StringMap` из 11.4 — сравнить в бенчмарке.
 
+## Фаза 16. Аллокаторы и раскладка памяти (`yasl/mem` + контейнеры) — P0/P1
+
+### Почему (результат аудита, 2026-10-28)
+
+Гипотеза владельца: «везде только malloc, нет free-list, стека, mmap». Проверка:
+
+**Уже есть, но включается только вручную:**
+- `mem::Pool` (`yasl/mem/pool.{h,cpp}`) — segregated free-list: классы — степени двойки 8..4096, слабы 64 KiB,
+  узел списка лежит внутри освобождённого блока. Не потокобезопасен (только через `Synchronized` с одним мьютексом).
+- `mem::Arena` / `InlineArena<N>` (`yasl/mem/arena.{h,cpp}`) — bump-аллокатор, буфер может быть на стеке,
+  заголовок чанка внутри чанка, откат последней аллокации.
+- `ObjPool`, `Synchronized<R>` (`sync.h`), `Tracking` (`tracking.h`), `SmallVector<T,N>`, SBO в `Function`,
+  `Shared` одним блоком (счётчики + объект), `String::Rep` — заголовок перед символами.
+
+**Действительно плохо:**
+1. Нет приоритета размещения: всё без явного ресурса → `default_resource()` → `SystemResource`
+   (`yasl/mem/resource.cpp`) = голый `malloc` / `posix_memalign`. Внутри библиотеки пулы использует только `SymbolTable`.
+2. Не переносимо: `posix_memalign` нет на Windows (там `_aligned_malloc`, который освобождается **только** `_aligned_free`).
+   Нельзя рассчитывать на glibc: целевые платформы — Linux (glibc и musl), macOS, Windows.
+3. `SystemResource::do_alloc` возвращает запрошенный размер, а не реальный — контракт `allocate_at_least` бесполезен.
+4. Служебные поля живут отдельно от данных / раздувают объекты:
+   - `HashTable` = 6 слов (`slots_, ctrl_, cap_, size_, growth_left_, res_`, `yasl/cont/assoc/hash_map.h:554`),
+     хотя slots+ctrl уже одним блоком (`allocate_table`, `hash_map.h:494`);
+   - `Vector`, `Deque` (`deque.h:439`) хранят `res_`/`cap_` в объекте;
+   - `String` = `{rep_, res_}` (`yasl/str/str.h:318`) без SSO — любая непустая строка аллоцирует, `Rep` дублирует `res`;
+   - `io::FileOutput`/`FileInput` держат `Unique<Impl>` (`yasl/io/file.h:102,220`) — лишняя аллокация и переход по указателю.
+5. Узлы `List`/`Treap`/`Trie`/`BTree` берутся из общего ресурса поштучно и разбросаны по куче.
+6. Нет роста на месте: `Vector::reallocate` (`yasl/cont/seq/vector.h:530`), `SmallVector`, `Deque`, `String` всегда alloc+copy+free.
+7. Нет пути страниц ОС (mmap / VirtualAlloc) для больших блоков.
+8. Нет крючка для tcmalloc / jemalloc / mimalloc.
+
+**Оговорка:** glibc malloc уже имеет tcache/fastbins и mmap-порог; tcmalloc — свой thread-cache. Поэтому каждое
+изменение, заявленное как ускорение, подтверждается бенчмарком (`yasl/bench/bench.cpp`), иначе не принимается.
+
+### Требования владельца (решено, не пересматривать)
+
+- **Переносимость:** Linux glibc/musl, macOS, Windows. Платформенный код — только в `.cpp` под `#if`, публичные заголовки
+  системных заголовков не тянут (как после 8.1).
+- **Минимальный размер объектов:** union, наследование, CRTP, EBO / `[[no_unique_address]]`. Каждый изменённый тип
+  получает `static_assert(sizeof(...) == ...)` в тесте.
+- **Служебное рядом с данными:** метаданные — в заголовке того же блока (через наследование `Header`), а не в
+  отдельной аллокации; узлы и слабы плотно; pImpl без отдельной аллокации.
+- **Приоритет размещения:** стек → быстрые аллокаторы, кладущие всё рядом (пулы/арены) → система (malloc-бэкенд) →
+  страницы ОС для больших блоков.
+- **Крючок для malloc:** возможность собрать yasl поверх tcmalloc (и любого другого аллокатора) без правки кода.
+- Публичный API контейнеров (`mem::Resource*` в конструкторах, `ScopedDefault`) **не ломается**.
+
+### Целевая архитектура
+
+```
+ объект контейнера: 1 указатель (+0 байт политики через EBO) ──► [Header : наследуется | данные]  — один блок
+
+ откуда берётся блок (статическая композиция на CRTP, один virtual на самом верху — mem::Resource):
+
+   Frame<N> (стек) ──переполнение──► ThreadLocalPool (слабы, плотно, free-list) ──> 4 KiB ──► sys (malloc-бэкенд)
+                                                                                └─> 256 KiB ─► Pages (mmap / VirtualAlloc)
+   sys = libc | tcmalloc | custom        (CMake: YASL_MALLOC)
+   default_resource() = chain | sys       (CMake: YASL_DEFAULT_ALLOC)
+```
+
+### Задачи
+
+Порядок: 16.1 → 16.2 → 16.3 → 16.4 → 16.5a..f → 16.6 → 16.7. `(независимо)` можно брать раньше.
+
+### - [x] **16.1 `mem::sys` — переносимый системный бэкенд + крючок для malloc.** P0.
+- Файл `yasl/mem/sys.h` (без системных заголовков), namespace `yasl::mem::sys`:
+  ```cpp
+  Block  alloc(size_t size, size_t align);                         // {nullptr,0} при неудаче
+  void   free(void* p, size_t size, size_t align) noexcept;        // sized free
+  Block  resize(void* p, size_t old, size_t want, size_t align);   // {nullptr,0} = «не умею»; вызывающий гарантирует relocatable
+  size_t good_size(size_t size) noexcept;                          // во что аллокатор округлит (nallocx)
+  ```
+  `align` передаётся и в `free`: ветка `align > kMaxAlign` выбирается одинаково при выделении и освобождении →
+  на Windows верная пара `_aligned_malloc`/`_aligned_free` без флага в блоке.
+- Бэкенды — CMake-опция `YASL_MALLOC=libc|tcmalloc|custom` (по умолчанию `libc`), компилируется **ровно один** файл
+  (исходники сейчас собираются глобом — исключить невыбранные `sys_*.cpp` в `CMakeLists.txt`):
+  - `yasl/mem/sys_libc.cpp`: `malloc`/`free`/`realloc`; aligned — `posix_memalign` (POSIX) / `_aligned_malloc`,
+    `_aligned_free`, `_aligned_realloc` (Windows). Реальный размер: glibc `malloc_usable_size` (`malloc.h`),
+    macOS `malloc_size` (`malloc/malloc.h`), Windows `_msize` / `_aligned_msize`, musl и прочие — запрошенный размер.
+  - `yasl/mem/sys_tcmalloc.cpp`: `tc_malloc`, `tc_memalign`, `tc_free_sized`, `tc_nallocx`, `tc_realloc`
+    (`<gperftools/tcmalloc.h>`). CMake: `pkg_check_modules(libtcmalloc_minimal)` или `find_library(tcmalloc_minimal tcmalloc)`;
+    нет библиотеки — `FATAL_ERROR` с понятным текстом. Связь — `INTERFACE`/публичная, протянуть в `yaslConfig.cmake.in`.
+  - `yasl/mem/sys_custom.cpp`: только `extern "C"` объявления `yasl_sys_alloc / yasl_sys_free / yasl_sys_resize /
+    yasl_sys_good_size`; определения даёт пользователь при линковке (переносимо, без weak-символов — их нет в MSVC).
+    Так подключаются jemalloc, mimalloc и т. п. Пример в README.
+- `SystemResource` (`resource.cpp`) — тонкая обёртка над `sys::`, `allocate_at_least` возвращает реальный размер.
+  `#include <stdlib.h>` из `resource.cpp` уходит в `sys_libc.cpp`.
+- `cmake/check_includes.cmake`: добавить в `ALLOWED` `malloc.h`, `malloc/malloc.h`, `windows.h`, `gperftools/tcmalloc.h`
+  с комментарием «только `yasl/mem/sys_*.cpp`, `yasl/mem/os_*.cpp`, под `#if`».
+- CI (`.github/workflows`): job `YASL_MALLOC=tcmalloc` (`apt install libgoogle-perftools-dev`), job `macos-latest`.
+- Готово, когда: `allocate_at_least(n).size >= n`; aligned 64 и 4096 работают и освобождаются; `Tracking` сходится;
+  все ctest проходят с `libc`, `tcmalloc`, `custom` (тестовая реализация `yasl_sys_*` поверх malloc в `yasl/test/`);
+  `cmake --install` + `find_package(yasl)` у потребителя с tcmalloc линкуется.
+  Windows-код пишется под `_WIN32`, но **без Windows-CI не проверен** — сослаться на открытый вопрос 9.1, не утверждать обратное.
+
+### - [ ] **16.2 Композиция аллокаторов на CRTP: `StackBuffer`, `Fallback`, `Segregator`, `AsResource`.** P0. `Зависит от:` 16.1.
+- Файл `yasl/mem/compose.h`. «Строительный блок» — класс со статическим интерфейсом
+  `Block alloc(size, align)`, `void free(p, size, align)`, `Block resize(...)`, `bool owns(const void*)`.
+  Комбинаторы — шаблоны, члены хранятся с `[[no_unique_address]]` (пустые блоки = 0 байт), вызовы не виртуальные:
+  - `StackBuffer<N>` — bump по inline-буферу + LIFO-откат последнего блока; `owns` — проверка диапазона.
+  - `Fallback<Primary, Secondary>` — сначала `Primary`, при отказе `Secondary`; `free`/`resize` по `Primary::owns(p)`.
+  - `Segregator<Threshold, Small, Large>` — по **запрошенному** размеру. Инвариант (записать комментарием): `deallocate`
+    получает размер из [запрошенный, отданный], значит оба по одну сторону порога (порог сравнивается с запрошенным, а
+    `Small` не отдаёт блоков, перешагивающих порог — проверить `YASL_ASSERT`).
+  - `SysBlock` — пустая обёртка над `mem::sys`.
+  - `AsResource<Composite>` — единственный виртуальный слой: превращает композицию в `mem::Resource`.
+- `Arena`/`InlineArena<N>` переписать через `StackBuffer` + чанки; публичный API и `mem_test.cpp` не меняются.
+- Готово, когда: тесты маршрутизации `free`, `sizeof` пустых композиций (`sizeof(Fallback<SysBlock,SysBlock>) == 1`
+  или 0 как базы), `Tracking`, существующие тесты арен проходят.
+
+### - [ ] **16.3 Приоритет стека: `mem::Frame<N>`.** P0. `Зависит от:` 16.2.
+- Файл `yasl/mem/frame.h`: RAII-объект на стеке = `AsResource<Fallback<StackBuffer<N>, upstream>>` + `ScopedDefault`.
+  Всё, что внутри области создаётся без явного ресурса, сначала ложится в стековый буфер, при переполнении — в цепочку ниже.
+  ```cpp
+  { mem::Frame<4096> f;  Vector<int> v;  String s = ...; }   // ноль обращений к куче, пока влезает
+  ```
+- Риск: объект, переживший `Frame`. В Debug деструктор `Frame` проверяет счётчик живых блоков из стекового буфера и
+  паникует через `YASL_INSIST` с понятным сообщением. Документировать в комментарии-примере над классом.
+- Inline-ёмкость в самих объектах: `SmallVector` и SBO `Function` уже есть; `String` SSO — в 16.5b.
+  `SmallHashMap<K,V,N>` **не делать**, пока бенчмарк не покажет нужду (записать как идею в «Открытые вопросы»).
+- Готово, когда: тест «ноль аллокаций в upstream при влезании» (`Tracking` как upstream), тест переполнения,
+  тест паники в Debug (через `CHECK_THROWS`, если `panic` бросает, иначе death-test не делать — записать вопрос).
+
+### - [ ] **16.4 `mem::ThreadLocalPool` и цепочка по умолчанию.** P1. `Зависит от:` 16.1, 16.2.
+- Развитие `Pool` (`pool.{h,cpp}` — сам `Pool` оставить, общий код вынести):
+  - Классы размеров: 4 на октаву (8,10,12,14,16,20,24,28,32,40,…, ≤ ~48 классов), `class_of` через `bit_width` + два
+    старших бита, индекс `uint8`. Фрагментация ≤ 25% (было до 50%). Применить и к обычному `Pool`.
+  - Слабы выровнены по `slab_size` (`alloc(slab_size, slab_size)`), **заголовок слаба в начале слаба** (наследование
+    `SlabHeader`): `owner`, класс, счётчик живых, атомарный MPSC-список «чужих» free. Заголовок находится маской адреса.
+  - Блоки одного класса одного потока лежат плотно; свободный список — внутри свободных блоков (как сейчас).
+  - Пустые слабы возвращаются upstream (гистерезис: держать 1 пустой на класс).
+- `thread_local` экземпляр на поток. Free из чужого потока — push в атомарный список слаба-владельца; владелец забирает
+  его при следующем `alloc` своего класса. Выход потока: слабы с живыми блоками уходят в глобальный список «сирот»
+  (под `Mutex`), их подбирает любой поток. Хук выхода — `pthread_key_create` / `FlsAlloc` в `yasl/mem/os_thread_{posix,win}.cpp`.
+- Цепочка: `using DefaultChain = Segregator<4096, ThreadLocalPool, Segregator<256 KiB, SysBlock, Pages>>`
+  (`Pages` до 16.7 — заглушка = `SysBlock`).
+- CMake-опция `YASL_DEFAULT_ALLOC=chain|sys`. **По умолчанию остаётся `sys`**, пока бенчмарки не покажут выигрыш `chain`
+  против glibc **и** против tcmalloc; при `YASL_MALLOC=tcmalloc` рекомендуем `sys`. Решение о смене умолчания — в Done.txt с цифрами.
+- Готово, когда: рандомизированный alloc/free без пересечений блоков; TSan: N потоков × M операций, передача блоков через
+  `Channel`, выход потока с живыми блоками; бенчмарки `hashmap/btreemap/stringmap insert`, `ObjPool make<Node>`,
+  новый «small alloc/free mixed sizes» — `chain` против `sys`(glibc) против `sys`(tcmalloc).
+
+### 16.5 Служебные поля рядом с данными, минимальный размер объектов. P1. `Зависит от:` 16.2 (16.4 желательно). По контейнеру на коммит.
+
+Общий механизм — файл `yasl/mem/header_block.h`:
+```cpp
+// Блок = Header (наследуется) + данные сразу за ним, одной аллокацией.
+template <class H, class T> struct HeaderBlock : H { T* data() noexcept; /* выравнивание max(alignof(H), alignof(T)) */ };
+// Пустой контейнер указывает на общий статический заголовок: без аллокации и без ветки на nullptr.
+template <class H> inline constinit H kEmptyHeader{};
+// Политика аллокатора с EBO (CRTP-база).
+struct PolyAlloc;    // хранит Resource* — по умолчанию, поведение как сейчас
+struct GlobalAlloc;  // пустая, зовёт цепочку по умолчанию напрямую (0 байт, без virtual и thread_local)
+template <class A> struct AllocHolder { [[no_unique_address]] A alloc_; };
+```
+Правила: контейнеры получают последний шаблонный параметр `class A = mem::PolyAlloc`; конструкторы с `Resource*`
+доступны только при `PolyAlloc` (`requires`). Если ресурс нестандартный, `Resource*` хранится **в заголовке блока**, а не
+в объекте; пустой контейнер с нестандартным ресурсом получает заголовок нулевой ёмкости из этого ресурса.
+`static_assert` на размеры — в тестах каждого контейнера.
+
+- [ ] **16.5a `HashMap`/`HashSet`** (`hash_map.h`): `{cap, size, growth_left, res}` → префикс уже единого блока
+  slots+ctrl; объект = 1 указатель (`ctrl_`; слоты по отрицательному смещению). 48 → 8 байт.
+  Готово: рандомизированные тесты против `std::unordered_map` проходят без изменений, бенчмарки hashmap не хуже.
+- [ ] **16.5b `String` + SSO** (`yasl/str/str.{h,cpp}`): union `{ char inline_[23]; Rep* rep_; }`, длина+тег в последнем
+  байте (схема libc++); `res` только в `Rep` (COW: счётчик, размер, ресурс и символы — один блок); короткая строка с
+  нестандартным ресурсом хранит ресурс… — **если это не влезает в 24 байта, остановиться и записать вопрос**
+  (варианты: 32 байта; или «короткие строки ресурс не помнят, ресурс нужен только при росте»).
+  Проверить все прямые обращения к `rep_` (`aliases`, `splice`, `unique`, хеш, `alloc_rep`/`release`).
+  Готово: длины 0/22/23, копия короткой строки — `Tracking.allocations == 0`, COW для длинных сохранён,
+  бенчмарки `hashmap insert string`, `stringmap*` не хуже. ABI-изменение отметить в Done.txt.
+- [ ] **16.5c `Vector`, `Deque`**: раскладка ThinVec — `{size, cap, res}` в заголовке блока, объект = 1 указатель.
+  `size()` требует разыменования, поэтому **делать и мерить** (push_back 10⁶, итерация, `Vector<Vector<int>>`,
+  `Vector<String>`); оставить ту раскладку, что быстрее, без двух параллельных API. Цифры — в Done.txt.
+  `SmallVector` не трогать (inline-буфер в объекте и есть его смысл).
+- [ ] **16.5d Узловые контейнеры** (`List`, `Treap`, `Trie`, листья/узлы `BTree`): узел наследует служебную часть
+  (`struct Node : detail::ListLink { T value; }` — уже так в `list.h:32`, распространить на остальные). Узлы берутся из
+  **встроенного в контейнер** `NodeSlab<sizeof(Node)>` (free-list внутри слабов этого контейнера, слабы из ресурса
+  контейнера): соседние узлы рядом в памяти, `clear()`/деструктор отдают слабы целиком. Итераторы и `splice` между
+  контейнерами: `splice` из другого контейнера требует, чтобы узел был из его слаба — **решить так: `splice` между
+  разными контейнерами переносит узел копированием указателя, а слаб-владелец определяется заголовком слаба по маске
+  адреса** (как в 16.4); если это ломает O(1)-гарантию `List::splice` — остановиться и записать вопрос.
+- [ ] **16.5e pImpl без отдельной аллокации** (`yasl/io/file.{h,cpp}`): `FileOutput`/`FileInput` с `Unique<Impl>` на
+  inline-хранилище фиксированного размера + `static_assert(sizeof(Impl) <= N)` в `.cpp` — тот же приём, что уже применён к
+  `Mutex`/`CondVar` (см. «Открытые вопросы», 8.1). Поискать другие `Unique<Impl>` (`grep -rn "Unique<Impl>" yasl`).
+- [ ] **16.5f Сжатие `mem`**: `Pool::SizeClass` → `{free, cur}` + общая граница текущего слаба; у `Arena` убрать
+  `initial_`/`initial_size_` (стековый буфер — `StackBuffer` из 16.2); `used_`/`reserved_` — только под `YASL_MEM_STATS`
+  (статистика и так есть в `Tracking`). `static_assert` на `sizeof(Pool)`, `sizeof(Arena)`, `sizeof(InlineArena<N>) - N`.
+
+### - [ ] **16.6 Рост на месте: `Resource::resize`.** P1. `Зависит от:` 16.1, 16.2.
+- `resource.h`: невиртуальный `Block resize(void* p, size_t old, size_t want, size_t align, bool relocatable)` +
+  виртуальный `do_resize`, по умолчанию «не умею» → вызывающий идёт старым путём alloc+relocate+free.
+  Размер объектов не меняется (только vtable).
+- Реализации: `StackBuffer`/`Arena` — расширение последнего блока; `SysBlock` — `sys::resize` (`realloc`/`tc_realloc`/
+  `_aligned_realloc`) **только** при `relocatable`; `Pages` — см. 16.7; `Tracking`/`Synchronized` — проброс + статистика;
+  `ThreadLocalPool` — в пределах класса размера возвращает тот же блок.
+- Trait `IsTriviallyRelocatable<T>` в `yasl/core/traits.h` (если нет): тривиально копируемые + явная специализация
+  для `String`, `Vector`, `Unique`, `Shared`.
+- Использовать в `Vector::reallocate`, `grow_and_construct`, heap-ветке `SmallVector`, `Deque` (только если кольцо не
+  разорвано), `String::splice`. В рехеше `HashMap` — нет (всегда новый блок).
+- Готово, когда: `Vector<int>` в `Arena` растёт без роста `reserved()` сверх итогового размера; нетривиальный `T` не идёт
+  через realloc (тест с типом-счётчиком перемещений); бенчмарк push_back 10⁶ / 10⁸ до/после.
+
+### - [ ] **16.7 `mem::Pages` — страницы ОС для больших блоков.** P2. `Зависит от:` 16.1.
+- `yasl/mem/page.{h,cpp}` + `yasl/mem/os_pages_{posix,win}.cpp`: `reserve/commit/decommit/release` —
+  `mmap(PROT_NONE)` + `mprotect` / `munmap`; `VirtualAlloc(MEM_RESERVE|MEM_COMMIT)` / `VirtualFree`.
+  Размер страницы у ОС один раз (`sysconf(_SC_PAGESIZE)` / `GetSystemInfo`). `allocate_at_least` отдаёт размер,
+  округлённый до страницы. `sys/mman.h` уже в `ALLOWED`.
+- `resize`: Linux — `mremap(MREMAP_MAYMOVE)`; macOS/Windows — рост внутри заранее зарезервированного диапазона
+  (reserve-then-commit, резерв = 2× запрошенного), иначе «не умею».
+- Опция `huge_pages`: `MADV_HUGEPAGE` (Linux) / `MEM_LARGE_PAGES` (Windows, только если есть привилегия) / нет на macOS.
+- Подключить вместо заглушки в `DefaultChain` (16.4). При `YASL_MALLOC=tcmalloc` в цепочке `Pages` не используется
+  (у tcmalloc свой путь для больших блоков).
+- Готово, когда: блок 1 MiB, resize 1 → 64 MiB с сохранением данных, `Tracking`, бенчмарк `Vector<uint64>` до 10⁸.
+
+### Сознательно вне фазы
+- `alloca`/VLA — небезопасно; вместо этого `Frame<N>`, `StackBuffer`, SSO, `SmallVector`, SBO.
+- Замена глобальных `operator new`/`malloc` своими — вместо этого крючок `YASL_MALLOC` (16.1).
+- `SmallHashMap` — только по данным бенчмарков.
+
+### Критические файлы
+- `yasl/mem/resource.{h,cpp}`, `pool.{h,cpp}`, `arena.{h,cpp}`, `tracking.h`, `sync.h`, `obj_pool.h`
+- новые: `yasl/mem/sys.h`, `sys_{libc,tcmalloc,custom}.cpp`, `compose.h`, `frame.h`, `thread_local_pool.{h,cpp}`,
+  `header_block.h`, `page.{h,cpp}`, `os_pages_{posix,win}.cpp`, `os_thread_{posix,win}.cpp` + `*_test.cpp`
+- `yasl/cont/assoc/{hash_map,treap,trie,btree}.h`, `yasl/cont/seq/{vector,small_vector,deque,list}.h`,
+  `yasl/str/str.{h,cpp}`, `yasl/io/file.{h,cpp}`, `yasl/core/traits.h`
+- `CMakeLists.txt` (`YASL_MALLOC`, `YASL_DEFAULT_ALLOC`, исключение невыбранных бэкендов из глоба),
+  `cmake/check_includes.cmake`, `yaslConfig.cmake.in`, `.github/workflows/*`
+- `yasl/bench/bench.cpp`, `TODO.md`, `Done.txt`, `README.md` (раздел `yasl/mem`: цепочка приоритетов, `Frame`,
+  сборка с tcmalloc / custom; таблица размеров объектов до/после)
+
+### Проверка
+После каждой задачи:
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DYASL_SANITIZE=ON && cmake --build build -j && (cd build && ctest --output-on-failure)
+cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=-Werror && cmake --build build-rel -j && (cd build-rel && ctest)
+```
+- 16.1: дополнительно сборки с `-DYASL_MALLOC=tcmalloc` и `-DYASL_MALLOC=custom`; проверка `cmake --install` + `find_package`.
+- 16.4, 16.5d: `build-tsan` (clang, `-DCMAKE_CXX_FLAGS=-fsanitize=thread`).
+- 16.3–16.7: `cmake -S . -B build-bench -DCMAKE_BUILD_TYPE=Release -DYASL_BUILD_BENCH=ON && cmake --build build-bench -j && ./build-bench/yasl_bench`;
+  цифры до/после — в `Done.txt`. Нет выигрыша — изменение не принимается (16.5c — выбор раскладки по цифрам).
+- macOS — через CI. Windows — не проверен до появления Windows-CI (открытый вопрос 9.1); так и писать в Done.txt.
+
+---
+
 ---
 
 ## Порядок выполнения (кратко)

@@ -28,8 +28,9 @@ class Tracking final : public Resource {
   Block do_alloc(size_t size, size_t align) override {
     Block b = upstream_->allocate_at_least(size, align);
     ++stats_.allocations;
-    stats_.bytes_in_use += b.size;
-    stats_.total_bytes += b.size;
+    // Count the requested size: that is what deallocate() usually gets back.
+    stats_.bytes_in_use += size;
+    stats_.total_bytes += size;
     stats_.peak_bytes = yasl::max(stats_.peak_bytes, stats_.bytes_in_use);
     return b;
   }
