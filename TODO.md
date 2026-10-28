@@ -500,7 +500,7 @@ template <class A> struct AllocHolder { [[no_unique_address]] A alloc_; };
   контейнерами: `splice` из другого контейнера требует, чтобы узел был из его слаба — **решить так: `splice` между
   разными контейнерами переносит узел копированием указателя, а слаб-владелец определяется заголовком слаба по маске
   адреса** (как в 16.4); если это ломает O(1)-гарантию `List::splice` — остановиться и записать вопрос.
-- [ ] **16.5e pImpl без отдельной аллокации** (`yasl/io/file.{h,cpp}`): `FileOutput`/`FileInput` с `Unique<Impl>` на
+- [x] **16.5e pImpl без отдельной аллокации** (`yasl/io/file.{h,cpp}`): `FileOutput`/`FileInput` с `Unique<Impl>` на
   inline-хранилище фиксированного размера + `static_assert(sizeof(Impl) <= N)` в `.cpp` — тот же приём, что уже применён к
   `Mutex`/`CondVar` (см. «Открытые вопросы», 8.1). Поискать другие `Unique<Impl>` (`grep -rn "Unique<Impl>" yasl`).
 - [ ] **16.5f Сжатие `mem`**: `Pool::SizeClass` → `{free, cur}` + общая граница текущего слаба; у `Arena` убрать

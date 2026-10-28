@@ -96,10 +96,15 @@ class FileOutput : public Output {
 
  private:
   struct Impl;
+  static constexpr size_t kImplSize = 32;
 
   void drain();
 
-  Unique<Impl> impl_;
+  Impl& impl() noexcept;
+
+  // The state lives inline (no second allocation); the size is checked by a
+  // static_assert in file.cpp.
+  alignas(void*) unsigned char impl_[kImplSize];
 };
 
 class SharedOutput;
@@ -216,8 +221,11 @@ class FileInput final : public Input {
 
  private:
   struct Impl;
+  static constexpr size_t kImplSize = 32;
 
-  Unique<Impl> impl_;
+  Impl& impl() noexcept;
+
+  alignas(void*) unsigned char impl_[kImplSize];
 };
 
 // Process-wide standard streams. out() is buffered and flushed at exit and

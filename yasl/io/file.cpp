@@ -134,10 +134,16 @@ struct FileOutput::Impl {
 FileOutput::FileOutput(StringView path, OpenMode mode)
     : FileOutput(File::open(path, mode)) {}
 
-FileOutput::FileOutput(File file, size_t buffer, mem::Resource* res)
-    : impl_(make_unique_in<Impl>(res, yasl::move(file), buffer, res)) {
-  pos_ = impl_->buf;
-  end_ = impl_->buf + impl_->cap;
+FileOutput::Impl& FileOutput::impl() noexcept {
+  return *yasl::launder(reinterpret_cast<Impl*>(impl_));
+}
+
+FileOutput::FileOutput(File file, size_t buffer, mem::Resource* res) {
+  static_assert(sizeof(Impl) <= kImplSize);
+  static_assert(alignof(Impl) <= alignof(void*));
+  ::new (impl_) Impl(yasl::move(file), buffer, res);
+  pos_ = impl().buf;
+  end_ = impl().buf + impl().cap;
 }
 
 FileOutput::~FileOutput() {
@@ -145,22 +151,23 @@ FileOutput::~FileOutput() {
     drain();
   } catch (const Exception&) {
   }
+  impl().~Impl();
 }
 
-File& FileOutput::file() noexcept { return impl_->file; }
+File& FileOutput::file() noexcept { return impl().file; }
 
 void FileOutput::drain() {
-  if (pos_ != impl_->buf) {
-    size_t n = size_t(pos_ - impl_->buf);
-    pos_ = impl_->buf;
-    impl_->file.write_all(impl_->buf, n);
+  if (pos_ != impl().buf) {
+    size_t n = size_t(pos_ - impl().buf);
+    pos_ = impl().buf;
+    impl().file.write_all(impl().buf, n);
   }
 }
 
 void FileOutput::overflow(const char* data, size_t n) {
   drain();
-  if (n >= impl_->cap) {
-    impl_->file.write_all(data, n);
+  if (n >= impl().cap) {
+    impl().file.write_all(data, n);
   } else {
     yasl::mem_copy(pos_, data, n);
     pos_ += n;
@@ -189,19 +196,25 @@ struct FileInput::Impl {
 FileInput::FileInput(StringView path)
     : FileInput(File::open(path, OpenMode::Read)) {}
 
-FileInput::FileInput(File file, size_t buffer, mem::Resource* res)
-    : impl_(make_unique_in<Impl>(res, yasl::move(file), buffer, res)) {
-  pos_ = end_ = impl_->buf;
+FileInput::Impl& FileInput::impl() noexcept {
+  return *yasl::launder(reinterpret_cast<Impl*>(impl_));
 }
 
-FileInput::~FileInput() = default;
+FileInput::FileInput(File file, size_t buffer, mem::Resource* res) {
+  static_assert(sizeof(Impl) <= kImplSize);
+  static_assert(alignof(Impl) <= alignof(void*));
+  ::new (impl_) Impl(yasl::move(file), buffer, res);
+  pos_ = end_ = impl().buf;
+}
 
-File& FileInput::file() noexcept { return impl_->file; }
+FileInput::~FileInput() { impl().~Impl(); }
+
+File& FileInput::file() noexcept { return impl().file; }
 
 bool FileInput::underflow() {
-  size_t n = impl_->file.read(impl_->buf, impl_->cap);
-  pos_ = impl_->buf;
-  end_ = impl_->buf + n;
+  size_t n = impl().file.read(impl().buf, impl().cap);
+  pos_ = impl().buf;
+  end_ = impl().buf + n;
   return n > 0;
 }
 
