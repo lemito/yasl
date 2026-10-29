@@ -46,9 +46,9 @@ jobs:
         malloc: [tcmalloc, custom]
     steps:
       - uses: actions/checkout@v4
-      - name: Install tcmalloc
+      - name: Build google/tcmalloc
         if: matrix.malloc == 'tcmalloc'
-        run: sudo apt-get update && sudo apt-get install -y libgoogle-perftools-dev
+        run: third_party/tcmalloc_build/build.sh
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DYASL_MALLOC=${{ matrix.malloc }}
       - name: Build
@@ -66,6 +66,45 @@ jobs:
         run: cmake --build build -j
       - name: Test
         run: cd build && ctest --output-on-failure
+
+  hash-swar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DYASL_SANITIZE=ON -DCMAKE_CXX_FLAGS=-DYASL_HASH_SSE2=0
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        run: cd build && ctest --output-on-failure
+
+  bazel:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        malloc: [libc, tcmalloc]
+        exclude:
+          - os: macos-latest
+            malloc: tcmalloc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test
+        run: bazel test --//:malloc=${{ matrix.malloc }} //:yasl_tests
+
+  meson:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Meson
+        run: pip3 install --user meson ninja || pip3 install --break-system-packages meson ninja
+      - name: Build and test
+        run: |
+          python3 -m mesonbuild.mesonmain setup build-meson -Dbuildtype=release
+          python3 -m mesonbuild.mesonmain test -C build-meson --print-errorlogs
 
   include-policy:
     runs-on: ubuntu-latest
