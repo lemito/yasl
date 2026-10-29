@@ -1,0 +1,150 @@
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+string_flag(
+    name = "malloc",
+    build_setting_default = "libc",
+    values = [
+        "libc",
+        "tcmalloc",
+        "custom",
+    ],
+)
+
+string_flag(
+    name = "default_alloc",
+    build_setting_default = "sys",
+    values = [
+        "sys",
+        "chain",
+    ],
+)
+
+[
+    config_setting(
+        name = "malloc_" + m,
+        flag_values = {":malloc": m},
+    )
+    for m in [
+        "libc",
+        "tcmalloc",
+        "custom",
+    ]
+]
+
+config_setting(
+    name = "default_alloc_chain",
+    flag_values = {":default_alloc": "chain"},
+)
+
+config_setting(
+    name = "msvc",
+    flag_values = {"@rules_cc//cc/compiler:compiler": "msvc-cl"},
+)
+
+_COPTS = select({
+    ":msvc": ["/W4"],
+    "//conditions:default": [
+        "-Wall",
+        "-Wextra",
+        "-Wpedantic",
+    ],
+})
+
+_THREADS = select({
+    "@platforms//os:windows": [],
+    "//conditions:default": ["-pthread"],
+})
+
+cc_library(
+    name = "yasl",
+    srcs = glob(
+        ["yasl/**/*.cpp"],
+        exclude = [
+            "yasl/**/*_test.cpp",
+            "yasl/test/**",
+            "yasl/bench/**",
+            "yasl/mem/sys_*.cpp",
+            "yasl/mem/os_pages_*.cpp",
+        ],
+    ) + select({
+        ":malloc_tcmalloc": ["yasl/mem/sys_tcmalloc.cpp"],
+        ":malloc_custom": ["yasl/mem/sys_custom.cpp"],
+        "//conditions:default": ["yasl/mem/sys_libc.cpp"],
+    }) + select({
+        "@platforms//os:windows": ["yasl/mem/os_pages_win.cpp"],
+        "//conditions:default": ["yasl/mem/os_pages_posix.cpp"],
+    }),
+    hdrs = glob(
+        ["yasl/**/*.h"],
+        exclude = [
+            "yasl/test/**",
+            "yasl/bench/**",
+        ],
+    ),
+    copts = _COPTS,
+    defines = select({
+        ":malloc_tcmalloc": ["YASL_MALLOC_TCMALLOC"],
+        "//conditions:default": [],
+    }),
+    strip_include_prefix = "/",
+    linkopts = _THREADS,
+    local_defines = select({
+        ":default_alloc_chain": ["YASL_DEFAULT_ALLOC_CHAIN"],
+        "//conditions:default": [],
+    }),
+    deps = select({
+        ":malloc_tcmalloc": ["@tcmalloc//tcmalloc"],
+        "//conditions:default": [],
+    }),
+)
+
+cc_library(
+    name = "test_runner",
+    testonly = True,
+    srcs = glob(["yasl/test/*.cpp"]),
+    hdrs = ["yasl/test/test.h"],
+    strip_include_prefix = "/",
+    local_defines = select({
+        ":malloc_custom": ["YASL_MALLOC_CUSTOM"],
+        "//conditions:default": [],
+    }),
+    deps = [":yasl"],
+    alwayslink = True,
+)
+
+cc_test(
+    name = "yasl_tests",
+    size = "small",
+    srcs = glob(["yasl/**/*_test.cpp"]),
+    deps = [
+        ":test_runner",
+        ":yasl",
+    ],
+)
+
+cc_library(
+    name = "bench_harness",
+    hdrs = ["yasl/bench/harness.h"],
+    strip_include_prefix = "/",
+    deps = [":yasl"],
+)
+
+cc_binary(
+    name = "yasl_bench",
+    srcs = glob(["yasl/bench/*.cpp"]),
+    deps = [
+        ":bench_harness",
+        ":yasl",
+        "@abseil-cpp//absl/container:btree",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/container:inlined_vector",
+        "@abseil-cpp//absl/hash",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:str_format",
+    ],
+)
