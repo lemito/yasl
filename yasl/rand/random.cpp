@@ -1,14 +1,17 @@
 #include "random.h"
 
 #include <fcntl.h>
-#include <sys/random.h>
 #include <unistd.h>
 #include <yasl/core/hash.h>
+
+#if defined(__APPLE__)
+#include <sys/random.h>
+#endif
 
 namespace yasl {
 uint64 os_random_u64() noexcept {
   uint64 v = 0;
-  if (::getrandom(&v, sizeof(v), 0) == ssize_t(sizeof(v))) {
+  if (::getentropy(&v, sizeof(v)) == 0) {
     return v;
   }
   int fd = ::open("/dev/urandom", O_RDONLY | O_CLOEXEC);

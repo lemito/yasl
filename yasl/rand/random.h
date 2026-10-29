@@ -150,13 +150,13 @@ class Pcg32 : public detail::RandomOps<Pcg32> {
 };
 
 // PCG-XSL-RR 128/64: 128-bit state, 64 bits of output per step, NOT
-// cryptographic. Needs the compiler's 128-bit integer (GCC, clang).
+// cryptographic.
 class Pcg64 : public detail::RandomOps<Pcg64> {
  public:
   explicit Pcg64(uint64 seed, uint64 stream = 0) noexcept {
-    inc_ = (U128(stream) << 1) | 1;
+    inc_ = {(stream << 1) | 1, stream >> 63};
     step();
-    state_ += seed;
+    add(state_, {seed, 0});
     step();
   }
 
@@ -166,21 +166,30 @@ class Pcg64 : public detail::RandomOps<Pcg64> {
 
   uint64 next_u64() noexcept {
     step();
-    uint64 folded = uint64(state_ >> 64) ^ uint64(state_);
-    unsigned rot = unsigned(state_ >> 122);
+    uint64 folded = state_.hi ^ state_.lo;
+    unsigned rot = unsigned(state_.hi >> 58);
     return (folded >> rot) | (folded << ((0u - rot) & 63));
   }
 
  private:
-  __extension__ using U128 = unsigned __int128;
+  struct U128 {
+    uint64 lo;
+    uint64 hi;
+  };
 
-  void step() noexcept {
-    constexpr U128 kMul =
-        (U128(2549297995355413924ull) << 64) | 4865540595714422341ull;
-    state_ = state_ * kMul + inc_;
+  static void add(U128& a, U128 b) noexcept {
+    a.lo += b.lo;
+    a.hi += b.hi + (a.lo < b.lo);
   }
 
-  U128 state_ = 0;
+  void step() noexcept {
+    constexpr U128 kMul = {4865540595714422341ull, 2549297995355413924ull};
+    WideProduct p = mul_wide(state_.lo, kMul.lo);
+    state_ = {p.lo, p.hi + state_.lo * kMul.hi + state_.hi * kMul.lo};
+    add(state_, inc_);
+  }
+
+  U128 state_ = {0, 0};
   U128 inc_;
 };
 }  // namespace yasl
