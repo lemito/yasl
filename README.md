@@ -23,7 +23,7 @@ cd build && ctest
 | Опция | По умолчанию | Что делает |
 |---|---|---|
 | `YASL_BUILD_TESTS` | `ON` для корневого проекта | собирает `yasl_tests` |
-| `YASL_BUILD_BENCH` | `OFF` | собирает `yasl_bench` (собирайте в Release) |
+| `YASL_BUILD_BENCH` | `OFF` | собирает `yasl_bench` (собирайте в Release); нужен Abseil (`find_package(absl)`) |
 | `YASL_SANITIZE` | `OFF` | ASan и UBSan |
 | `YASL_MALLOC` | `libc` | системный аллокатор: `libc`, `tcmalloc` или `custom` |
 | `YASL_DEFAULT_ALLOC` | `sys` | ресурс по умолчанию: `sys` или `chain` |
@@ -38,7 +38,34 @@ find_package(yasl REQUIRED)
 target_link_libraries(app PRIVATE yasl::yasl)
 ```
 
-Бенчмарки: `./build-bench/yasl_bench [фильтр]`.
+### Другие системы сборки
+
+CMake — основная сборка. Кроме неё есть Bazel, Meson и ya make (Аркадия) с теми же опциями:
+
+| | Bazel | Meson | ya make |
+|---|---|---|---|
+| файлы | `MODULE.bazel`, `BUILD.bazel`, `.bazelrc` | `meson.build`, `meson.options` | `ya.make`, `yasl/test/ya.make` |
+| аллокатор | `--//:malloc=libc\|tcmalloc\|custom` | `-Dmalloc=...` | `-DYASL_MALLOC=...` |
+| ресурс по умолчанию | `--//:default_alloc=sys\|chain` | `-Ddefault_alloc=...` | `-DYASL_DEFAULT_ALLOC=...` |
+| tcmalloc | `@tcmalloc` из BCR, сабмодуль не нужен | архив из `third_party/tcmalloc_build/build.sh` (`-Dtcmalloc_lib=...`) | `ALLOCATOR(TCMALLOC...)` в программе |
+| подключение | `bazel_dep(name = "yasl")` + override, `@yasl//:yasl` | `dependency('yasl')` (subproject) или `pkg-config yasl` | `PEERDIR(contrib/libs/yasl)` |
+
+```sh
+bazel test //:yasl_tests                       # --config=tcmalloc: с google/tcmalloc
+bazel run -c opt //:yasl_bench
+meson setup build-meson -Dbuildtype=release && meson test -C build-meson
+ya make -r contrib/libs/yasl                   # ожидает репозиторий в contrib/libs/yasl
+```
+
+Meson и ya.make перечисляют исходники явно. Тест `yasl_build_lists` (`cmake/check_build_lists.cmake`)
+падает, если новый `.cpp` не добавлен в эти списки. ya.make написан по правилам Аркадии, но не собирался:
+`ya` вне Аркадии недоступен.
+
+Бенчмарки: `./build-bench/yasl_bench [--csv] [фильтр]`. Фильтр ищет подстроку в строке `группа имя`,
+`--csv` выводит результаты в CSV. Группы: `alloc_bench.cpp` (аллокаторы), `cont_bench.cpp` (контейнеры),
+`str_bench.cpp` (строки и числа). В каждой группе одна и та же работа разными реализациями: yasl, std,
+Abseil. Чтобы сравнить с google/tcmalloc, соберите бенчмарки с `-DYASL_MALLOC=tcmalloc` и запускайте с
+`GLIBC_TUNABLES=glibc.pthread.rseq=0` (см. раздел «Память»).
 
 ## Структура
 
@@ -164,6 +191,11 @@ ThreadPool pool(4);
 auto fut = pool.spawn([] { return 42; });
 ```
 
+Вся синхронизация построена на одном примитиве — ожидании на адресе (`yasl/conc/futex.h`): futex в Linux,
+`__ulock_wait` в macOS, `WaitOnAddress` в Windows, на прочих unix — таблица pthread-мьютексов
+(`-DYASL_FUTEX_PTHREAD` включает её и в Linux). `Semaphore` — одно 32-битное слово: счётчик и бит «есть
+ожидающие». `Mutex` — бинарный семафор. `CondVar`, `RwLock` и `Barrier` — тоже атомарные слова, без pthread.
+
 ### Время и случайные числа
 
 ```cpp
@@ -210,7 +242,26 @@ Vector<int> v;                              // берёт память из aren
 блок на месте. `Vector`, `SmallVector` и `String` используют это для типов, которые можно перемещать побайтово.
 
 Под всеми ресурсами лежит `mem::sys`. Бэкенд выбирается при сборке: `-DYASL_MALLOC=libc` (по умолчанию),
-`tcmalloc` или `custom`. Для `custom` программа сама определяет четыре функции с C-линковкой:
+`tcmalloc` или `custom`. `tcmalloc` — это [google/tcmalloc](https://github.com/google/tcmalloc), он подменяет
+`malloc` и `operator new` во всей программе. Он подключён git-сабмодулем `third_party/tcmalloc` с
+`update = none`: обычный `git clone --recursive` его не скачивает. Скрипт сборки сам скачивает сабмодуль
+и собирает архив (нужен Bazel или bazelisk):
+
+```sh
+third_party/tcmalloc_build/build.sh    # third_party/tcmalloc_build/lib/libtcmalloc_google.a
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DYASL_MALLOC=tcmalloc
+```
+
+Версия tcmalloc — коммит сабмодуля. Другой готовый архив можно указать через
+`-DYASL_TCMALLOC_LIB=...`. При `cmake --install` архив не устанавливается, его нужно линковать самому
+(`meson install` его ставит рядом с `libyasl.a` и прописывает в `yasl.pc`).
+
+На glibc 2.35 и новее glibc сама занимает rseq, и tcmalloc без него работает без per-CPU кешей, медленнее
+glibc malloc. Запускайте программу с `GLIBC_TUNABLES=glibc.pthread.rseq=0`. Долгоживущим программам стоит
+также крутить `tcmalloc::MallocExtension::ProcessBackgroundActions()` в отдельном потоке: он перераспределяет
+per-CPU кеши.
+
+Для `custom` программа сама определяет четыре функции с C-линковкой:
 `yasl_sys_alloc`, `yasl_sys_free`, `yasl_sys_resize`, `yasl_sys_good_size` (сигнатуры в `yasl/mem/sys_custom.cpp`).
 
 С контейнерами std ресурсы работают через `yasl/compat`:
