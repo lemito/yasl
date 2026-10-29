@@ -124,10 +124,6 @@ class StringBuilder final : public io::Output {
   // Exposes the spare capacity as the write window (makes the buffer unique).
   void attach() {
     char* d = s_.mut_data();
-    if (s_.capacity() == 0) {
-      detach();
-      return;
-    }
     pos_ = d + s_.size();
     end_ = d + s_.capacity();
   }

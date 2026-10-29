@@ -120,40 +120,97 @@ YASL_TEST(string_basic) {
   CHECK(e.empty());
   CHECK_EQ(StringView(e.c_str()), ""_sv);
   e.clear();
-  CHECK_EQ(e.capacity(), size_t(0));
+  CHECK_EQ(e.capacity(), String::inline_capacity);
+}
+
+YASL_TEST(string_sso) {
+  static_assert(sizeof(String) == 24);
+  mem::Tracking t;
+  {
+    String a("0123456789abcde", &t);
+    CHECK_EQ(a.size(), size_t(15));
+    CHECK_EQ(a.capacity(), String::inline_capacity);
+    CHECK_EQ(t.stats().live(), size_t(0));
+    CHECK_EQ(StringView(a.c_str()), a.view());
+    CHECK(!a.is_shared());
+
+    String b = a;
+    CHECK(a.data() != b.data());
+    b.set(0, 'X');
+    CHECK_EQ(a, "0123456789abcde");
+    CHECK_EQ(b, "X123456789abcde");
+
+    String c = a;
+    c.push_back('f');
+    CHECK_EQ(c, "0123456789abcdef");
+    CHECK_EQ(t.stats().live(), size_t(1));
+    CHECK(c.capacity() > String::inline_capacity);
+
+    String d = c;
+    CHECK(d.is_shared());
+    d.erase(3);
+    CHECK_EQ(d, "012");
+    CHECK(!d.is_shared());
+    CHECK(!c.is_shared());
+    CHECK_EQ(c, "0123456789abcdef");
+    CHECK_EQ(t.stats().live(), size_t(1));
+
+    String m = yasl::move(c);
+    CHECK(c.empty());
+    CHECK_EQ(m, "0123456789abcdef");
+    String s = "tiny";
+    s.swap(m);
+    CHECK_EQ(s, "0123456789abcdef");
+    CHECK_EQ(m, "tiny");
+    s = m;
+    CHECK_EQ(s, "tiny");
+    String& same = s;
+    s = same;
+    CHECK_EQ(s, "tiny");
+    CHECK_EQ(t.stats().live(), size_t(0));
+
+    String e("", &t);
+    CHECK(e.empty());
+    CHECK_EQ(StringView(e.c_str()), ""_sv);
+    e.append(String(40, 'q', &t));
+    e.clear();
+    e += 'z';
+    CHECK_EQ(e, "z");
+  }
+  CHECK_EQ(t.stats().live(), size_t(0));
 }
 
 YASL_TEST(string_cow) {
   mem::Tracking t;
   {
-    String a("shared buffer", &t);
+    String a("a shared buffer beyond sso", &t);
     String b = a;
     CHECK_EQ(a.data(), b.data());
     CHECK(a.is_shared());
     CHECK_EQ(a.use_count(), size_t(2));
     CHECK_EQ(t.stats().live(), size_t(1));
 
-    b.set(0, 'S');
+    b.set(0, 'A');
     CHECK(a.data() != b.data());
-    CHECK_EQ(a, "shared buffer");
-    CHECK_EQ(b, "Shared buffer");
+    CHECK_EQ(a, "a shared buffer beyond sso");
+    CHECK_EQ(b, "A shared buffer beyond sso");
     CHECK(!a.is_shared());
     CHECK_EQ(t.stats().live(), size_t(2));
 
     String c = a;
     c += "!";
-    CHECK_EQ(a, "shared buffer");
-    CHECK_EQ(c, "shared buffer!");
+    CHECK_EQ(a, "a shared buffer beyond sso");
+    CHECK_EQ(c, "a shared buffer beyond sso!");
 
     String d = a;
     d.clear();
-    CHECK_EQ(a, "shared buffer");
+    CHECK_EQ(a, "a shared buffer beyond sso");
 
     String e = a;
     char* p = e.mut_data();
-    p[1] = 'H';
-    CHECK_EQ(a, "shared buffer");
-    CHECK_EQ(e, "sHared buffer");
+    p[3] = 'H';
+    CHECK_EQ(a, "a shared buffer beyond sso");
+    CHECK_EQ(e, "a sHared buffer beyond sso");
 
     String f(a, mem::system_resource());
     CHECK(f.data() != a.data());

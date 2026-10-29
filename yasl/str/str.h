@@ -26,9 +26,11 @@ class String {
   using const_iterator = const char*;
   using iterator = const_iterator;
 
-  String() noexcept : res_(mem::default_resource()) {}
+  static constexpr size_t inline_capacity = 15;
 
-  explicit String(mem::Resource* res) noexcept : res_(res) {}
+  String() noexcept : res_(mem::default_resource()) { init_empty(); }
+
+  explicit String(mem::Resource* res) noexcept : res_(res) { init_empty(); }
 
   String(const char* s, mem::Resource* res = mem::default_resource())
       : String(StringView(s), res) {}
@@ -37,8 +39,15 @@ class String {
       : String(StringView(s, n), res) {}
 
   explicit String(StringView s, mem::Resource* res = mem::default_resource())
-      : String(res) {
-    append(s);
+      : res_(res) {
+    if (s.size() <= inline_capacity) [[likely]] {
+      if (!s.empty()) {
+        yasl::mem_copy(buf_, s.data(), s.size());
+      }
+      set_inline_size(s.size());
+    } else {
+      init_heap(s);
+    }
   }
 
   String(size_t n, char c, mem::Resource* res = mem::default_resource())
@@ -46,36 +55,48 @@ class String {
     append(n, c);
   }
 
-  String(const String& other) noexcept : rep_(other.rep_), res_(other.res_) {
-    if (rep_) {
-      rep_->rc.ref();
+  String(const String& other) noexcept : res_(other.res_) {
+    if (other.is_heap()) {
+      other.rep_->rc.ref();
     }
+    yasl::mem_copy(buf_, other.buf_, sizeof(buf_));
   }
 
   // Deep copy into another resource.
   String(const String& other, mem::Resource* res) : String(other.view(), res) {}
 
-  String(String&& other) noexcept
-      : rep_(yasl::exchange(other.rep_, nullptr)), res_(other.res_) {}
+  String(String&& other) noexcept : res_(other.res_) {
+    yasl::mem_copy(buf_, other.buf_, sizeof(buf_));
+    other.init_empty();
+  }
 
-  ~String() { release(rep_); }
+  ~String() {
+    if (is_heap()) {
+      release(rep_);
+    }
+  }
 
   String& operator=(const String& other) noexcept {
-    if (rep_ != other.rep_) {
-      if (other.rep_) {
+    if (this != &other) {
+      if (other.is_heap()) {
         other.rep_->rc.ref();
       }
-      release(rep_);
-      rep_ = other.rep_;
+      if (is_heap()) {
+        release(rep_);
+      }
+      yasl::mem_copy(buf_, other.buf_, sizeof(buf_));
     }
     return *this;
   }
 
   String& operator=(String&& other) noexcept {
     if (this != &other) {
-      release(rep_);
-      rep_ = yasl::exchange(other.rep_, nullptr);
+      if (is_heap()) {
+        release(rep_);
+      }
+      yasl::mem_copy(buf_, other.buf_, sizeof(buf_));
       res_ = other.res_;
+      other.init_empty();
     }
     return *this;
   }
@@ -86,15 +107,19 @@ class String {
 
   // Observers
 
-  size_t size() const noexcept { return rep_ ? rep_->size : 0; }
+  size_t size() const noexcept {
+    return is_heap() ? rep_->size : inline_size();
+  }
 
   size_t length() const noexcept { return size(); }
 
   bool empty() const noexcept { return size() == 0; }
 
-  size_t capacity() const noexcept { return rep_ ? rep_->cap : 0; }
+  size_t capacity() const noexcept {
+    return is_heap() ? rep_->cap : inline_capacity;
+  }
 
-  const char* data() const noexcept { return rep_ ? rep_->chars() : ""; }
+  const char* data() const noexcept { return is_heap() ? rep_->chars() : buf_; }
 
   const char* c_str() const noexcept { return data(); }
 
@@ -113,12 +138,19 @@ class String {
 
   char back() const noexcept { return view().back(); }
 
-  StringView view() const noexcept { return {data(), size()}; }
+  StringView view() const noexcept {
+    if (is_heap()) {
+      return {rep_->chars(), rep_->size};
+    }
+    return {buf_, inline_size()};
+  }
 
   // True if the buffer is shared with another String.
-  bool is_shared() const noexcept { return rep_ && !rep_->rc.unique(); }
+  bool is_shared() const noexcept { return is_heap() && !rep_->rc.unique(); }
 
-  size_t use_count() const noexcept { return rep_ ? rep_->rc.count() : 0; }
+  size_t use_count() const noexcept {
+    return is_heap() ? rep_->rc.count() : (empty() ? 0 : 1);
+  }
 
   mem::Resource* resource() const noexcept { return res_; }
 
@@ -172,11 +204,20 @@ class String {
   String& append(size_t n, char c);
 
   void push_back(char c) {
-    if (rep_ && rep_->size < rep_->cap && rep_->rc.unique()) [[likely]] {
-      char* d = rep_->chars();
-      d[rep_->size++] = c;
-      d[rep_->size] = '\0';
-      return;
+    if (is_heap()) {
+      if (rep_->size < rep_->cap && rep_->rc.unique()) [[likely]] {
+        char* d = rep_->chars();
+        d[rep_->size++] = c;
+        d[rep_->size] = '\0';
+        return;
+      }
+    } else {
+      size_t n = inline_size();
+      if (n < inline_capacity) [[likely]] {
+        buf_[n] = c;
+        set_inline_size(n + 1);
+        return;
+      }
     }
     *splice(size(), 0, 1) = c;
   }
@@ -212,7 +253,10 @@ class String {
   }
 
   void swap(String& other) noexcept {
-    yasl::swap(rep_, other.rep_);
+    char tmp[sizeof(buf_)];
+    yasl::mem_copy(tmp, buf_, sizeof(buf_));
+    yasl::mem_copy(buf_, other.buf_, sizeof(buf_));
+    yasl::mem_copy(other.buf_, tmp, sizeof(buf_));
     yasl::swap(res_, other.res_);
   }
 
@@ -260,7 +304,8 @@ class String {
   }
 
   friend bool operator==(const String& a, const String& b) noexcept {
-    return a.rep_ == b.rep_ || a.view() == b.view();
+    return (a.is_heap() && b.is_heap() && a.rep_ == b.rep_) ||
+           a.view() == b.view();
   }
 
   friend std::strong_ordering operator<=>(const String& a,
@@ -304,10 +349,33 @@ class String {
     }
   };
 
+  static constexpr size_t tag_index = inline_capacity;
+  static constexpr uint8 heap_tag = 0x80;
+
   static Rep* alloc_rep(mem::Resource* res, size_t cap);
   static void release(Rep* rep) noexcept;
 
-  bool unique() const noexcept { return rep_ && rep_->rc.unique(); }
+  bool is_heap() const noexcept { return uint8(buf_[tag_index]) & heap_tag; }
+
+  size_t inline_size() const noexcept {
+    return inline_capacity - uint8(buf_[tag_index]);
+  }
+
+  void set_inline_size(size_t n) noexcept {
+    buf_[tag_index] = char(inline_capacity - n);
+    buf_[n] = '\0';
+  }
+
+  void init_empty() noexcept { set_inline_size(0); }
+
+  void set_heap(Rep* rep) noexcept {
+    rep_ = rep;
+    buf_[tag_index] = char(heap_tag);
+  }
+
+  void init_heap(StringView s);
+
+  bool unique() const noexcept { return !is_heap() || rep_->rc.unique(); }
 
   bool aliases(StringView s) const noexcept;
 
@@ -315,9 +383,14 @@ class String {
   // `insert` bytes there. Returns a pointer to the gap.
   char* splice(size_t pos, size_t remove, size_t insert);
 
-  Rep* rep_ = nullptr;
+  union {
+    Rep* rep_;
+    char buf_[inline_capacity + 1];
+  };
   mem::Resource* res_;
 };
+
+static_assert(sizeof(String) == 3 * sizeof(void*));
 
 // Text utilities that build new strings.
 

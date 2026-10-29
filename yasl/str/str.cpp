@@ -1,11 +1,6 @@
 #include "str.h"
 
 namespace yasl {
-namespace {
-// Returned by mut_data() for an empty string: there is nothing to write anyway.
-char g_empty[1] = {'\0'};
-}  // namespace
-
 String::Rep* String::alloc_rep(mem::Resource* res, size_t cap) {
   if (cap > max_value<size_t>() - sizeof(Rep) - 1) {
     throw LengthError("yasl::String: too large");
@@ -25,13 +20,22 @@ void String::release(Rep* rep) noexcept {
   }
 }
 
+void String::init_heap(StringView s) {
+  Rep* rep = alloc_rep(res_, s.size());
+  char* d = rep->chars();
+  yasl::mem_copy(d, s.data(), s.size());
+  rep->size = s.size();
+  d[s.size()] = '\0';
+  set_heap(rep);
+}
+
 bool String::aliases(StringView s) const noexcept {
-  if (!rep_ || s.empty()) {
+  if (s.empty()) {
     return false;
   }
-  auto b = reinterpret_cast<uintptr_t>(rep_->chars());
+  auto b = reinterpret_cast<uintptr_t>(data());
   auto p = reinterpret_cast<uintptr_t>(s.data());
-  return b <= p && p <= b + rep_->cap;
+  return b <= p && p <= b + capacity();
 }
 
 char String::at(size_t i) const {
@@ -51,8 +55,23 @@ char* String::splice(size_t pos, size_t remove, size_t insert) {
   size_t ns = kept + insert;
   size_t tail = old - pos - remove;
 
-  if (unique() && ns > rep_->cap) {
-    // Try to grow the block where it is.
+  if (!is_heap()) {
+    if (ns <= inline_capacity) {
+      yasl::mem_move(buf_ + pos + insert, buf_ + pos + remove, tail);
+      set_inline_size(ns);
+      return buf_ + pos;
+    }
+    Rep* nr = alloc_rep(res_, yasl::max(ns, inline_capacity * 2));
+    char* nd = nr->chars();
+    yasl::mem_copy(nd, buf_, pos);
+    yasl::mem_copy(nd + pos + insert, buf_ + pos + remove, tail);
+    nr->size = ns;
+    nd[ns] = '\0';
+    set_heap(nr);
+    return nd + pos;
+  }
+
+  if (rep_->rc.unique() && ns > rep_->cap) {
     size_t cap = yasl::max(ns, rep_->cap * 2);
     mem::Block b = rep_->res->resize(rep_, sizeof(Rep) + rep_->cap + 1,
                                      sizeof(Rep) + cap + 1, alignof(Rep), true);
@@ -61,32 +80,35 @@ char* String::splice(size_t pos, size_t remove, size_t insert) {
       rep_->cap = b.size - sizeof(Rep) - 1;
     }
   }
-  if (unique() && ns <= rep_->cap) {
+  if (rep_->rc.unique() && ns <= rep_->cap) {
     char* d = rep_->chars();
     yasl::mem_move(d + pos + insert, d + pos + remove, tail);
     rep_->size = ns;
     d[ns] = '\0';
     return d + pos;
   }
-  if (ns == 0) {
-    release(rep_);
-    rep_ = nullptr;
-    return g_empty;
-  }
 
+  Rep* old_rep = rep_;
+  const char* d = old_rep->chars();
+  if (ns <= inline_capacity) {
+    yasl::mem_copy(buf_, d, pos);
+    yasl::mem_copy(buf_ + pos + insert, d + pos + remove, tail);
+    set_inline_size(ns);
+    release(old_rep);
+    return buf_ + pos;
+  }
   size_t cap = ns;
-  if (rep_ && ns > rep_->cap) {
-    cap = yasl::max(ns, rep_->cap * 2);
+  if (ns > old_rep->cap) {
+    cap = yasl::max(ns, old_rep->cap * 2);
   }
   Rep* nr = alloc_rep(res_, cap);
-  const char* d = data();
   char* nd = nr->chars();
   yasl::mem_copy(nd, d, pos);
   yasl::mem_copy(nd + pos + insert, d + pos + remove, tail);
   nr->size = ns;
   nd[ns] = '\0';
-  release(rep_);
-  rep_ = nr;
+  release(old_rep);
+  set_heap(nr);
   return nd + pos;
 }
 
@@ -114,8 +136,8 @@ String& String::append(size_t n, char c) {
 }
 
 char* String::mut_data() {
-  if (!rep_) {
-    return g_empty;
+  if (!is_heap()) {
+    return buf_;
   }
   if (!rep_->rc.unique()) {
     reserve(rep_->size);
@@ -124,10 +146,7 @@ char* String::mut_data() {
 }
 
 void String::reserve(size_t n) {
-  if (unique() && n <= rep_->cap) {
-    return;
-  }
-  if (!rep_ && n == 0) {
+  if (n <= capacity() && unique()) {
     return;
   }
   size_t sz = size();
@@ -135,8 +154,10 @@ void String::reserve(size_t n) {
   yasl::mem_copy(nr->chars(), data(), sz);
   nr->size = sz;
   nr->chars()[sz] = '\0';
-  release(rep_);
-  rep_ = nr;
+  if (is_heap()) {
+    release(rep_);
+  }
+  set_heap(nr);
 }
 
 void String::resize(size_t n, char c) {
@@ -149,12 +170,14 @@ void String::resize(size_t n, char c) {
 }
 
 void String::clear() noexcept {
-  if (unique()) {
+  if (!is_heap()) {
+    init_empty();
+  } else if (rep_->rc.unique()) {
     rep_->size = 0;
     rep_->chars()[0] = '\0';
   } else {
     release(rep_);
-    rep_ = nullptr;
+    init_empty();
   }
 }
 
