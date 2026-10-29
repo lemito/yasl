@@ -2,46 +2,30 @@
 
 #include <yasl/core/types.h>
 
-namespace yasl {
-namespace detail {
-// The OS lock lives in inline storage so that no system header is needed here;
-// the size is checked against the real type in mutex.cpp. This is a pImpl
-// without the allocation.
-#if defined(__APPLE__)
-inline constexpr size_t kMutexSize = 64;
-inline constexpr size_t kRwLockSize = 200;
-#else
-inline constexpr size_t kMutexSize = 40;
-inline constexpr size_t kRwLockSize = 56;
-#endif
-}  // namespace detail
+#include <atomic>
 
-// Thin wrapper over the OS mutex.
+#include "semaphore.h"
+
+namespace yasl {
 class Mutex {
  public:
-  Mutex() noexcept;
-  ~Mutex();
+  Mutex() noexcept = default;
 
   Mutex(const Mutex&) = delete;
   Mutex& operator=(const Mutex&) = delete;
 
-  void lock() noexcept;
-  bool try_lock() noexcept;
-  void unlock() noexcept;
-
-  // Pointer to the underlying pthread_mutex_t.
-  void* native_handle() noexcept { return storage_; }
+  void lock() noexcept { sem_.acquire(); }
+  bool try_lock() noexcept { return sem_.try_acquire(); }
+  void unlock() noexcept { sem_.release(); }
 
  private:
-  alignas(8) unsigned char storage_[detail::kMutexSize];
+  Semaphore sem_{1};
 };
 
-// Thin wrapper over the OS reader-writer lock; see RwLock<T> for the typed
-// version.
+// See RwLock<T> for the typed version.
 class RawRwLock {
  public:
-  RawRwLock() noexcept;
-  ~RawRwLock();
+  RawRwLock() noexcept = default;
 
   RawRwLock(const RawRwLock&) = delete;
   RawRwLock& operator=(const RawRwLock&) = delete;
@@ -53,7 +37,8 @@ class RawRwLock {
   void unlock() noexcept;
 
  private:
-  alignas(8) unsigned char storage_[detail::kRwLockSize];
+  std::atomic<uint32> state_{0};
+  std::atomic<uint32> waiters_{0};
 };
 
 template <class M>

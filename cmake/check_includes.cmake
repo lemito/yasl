@@ -2,14 +2,15 @@
 #
 # Allowed: language-support headers the compiler needs (<new>, <initializer_list>,
 # <compare>, <cstddef>, <cstdint>), <atomic>, and OS / C runtime headers.
-# execinfo.h: backtrace() in panic(). sys/mman.h: memfd_create()/shm_open() for MemFd. sys/random.h: getrandom() for the per-process hash seed; time.h: clock_gettime() for Instant; sched.h: sched_yield() for this_thread::yield(); dirent.h: opendir() for fs::read_dir; stdio.h: rename() for fs::rename.
-# malloc.h, malloc/malloc.h, windows.h, gperftools/tcmalloc.h: only yasl/mem/sys_*.cpp and yasl/mem/os_*.cpp, under #if.
+# execinfo.h: backtrace() in panic(). sys/mman.h: memfd_create()/shm_open() for MemFd. sys/random.h: getentropy() on macOS for the per-process hash seed; time.h: clock_gettime() for Instant; sched.h: sched_yield() for this_thread::yield(); dirent.h: opendir() for fs::read_dir; stdio.h: rename() for fs::rename.
+# malloc.h, malloc/malloc.h, windows.h: only yasl/mem/sys_*.cpp and yasl/mem/os_*.cpp, under #if.
 # yasl/compat/ (std interop), tests, the test runner and yasl/bench are exempt.
 
 set(ALLOWED
     cstddef cstdint stddef.h stdint.h new initializer_list compare atomic
     sys/types.h sys/stat.h sys/mman.h sys/random.h time.h sched.h dirent.h stdio.h unistd.h fcntl.h errno.h string.h stdlib.h pthread.h execinfo.h
-    malloc.h malloc/malloc.h windows.h gperftools/tcmalloc.h)
+    malloc.h malloc/malloc.h windows.h
+    emmintrin.h intrin.h crt_externs.h linux/futex.h sys/syscall.h)
 
 file(GLOB_RECURSE FILES "${ROOT}/yasl/*.h" "${ROOT}/yasl/*.cpp")
 set(BAD 0)

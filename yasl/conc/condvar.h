@@ -2,34 +2,57 @@
 
 #include <yasl/time/time.h>
 
+#include <atomic>
+
+#include "futex.h"
 #include "mutex.h"
 
 namespace yasl {
-namespace detail {
-inline constexpr size_t kCondVarSize = 48;
-}
-
-// Condition variable (monotonic clock for timeouts). Always wait in a loop or
-// with a predicate.
+// Condition variable. Always wait in a loop or with a predicate.
 //
 //     auto g = queue.lock();
 //     cv.wait(g, [&] { return !g->empty(); });
 class CondVar {
  public:
-  CondVar() noexcept;
-  ~CondVar();
+  CondVar() noexcept = default;
 
   CondVar(const CondVar&) = delete;
   CondVar& operator=(const CondVar&) = delete;
 
-  void notify_one() noexcept;
-  void notify_all() noexcept;
+  void notify_one() noexcept {
+    seq_.fetch_add(1);
+    if (waiters_.load() != 0) {
+      detail::futex_wake_one(seq_);
+    }
+  }
+
+  void notify_all() noexcept {
+    seq_.fetch_add(1);
+    if (waiters_.load() != 0) {
+      detail::futex_wake_all(seq_);
+    }
+  }
 
   // m must be locked by the caller; it is unlocked while waiting.
-  void wait(Mutex& m) noexcept;
+  void wait(Mutex& m) noexcept {
+    uint32 seq = seq_.load(std::memory_order_relaxed);
+    waiters_.fetch_add(1);
+    m.unlock();
+    detail::futex_wait(seq_, seq);
+    waiters_.fetch_sub(1);
+    m.lock();
+  }
 
   // Returns false on timeout.
-  bool wait_for(Mutex& m, Duration timeout) noexcept;
+  bool wait_for(Mutex& m, Duration timeout) noexcept {
+    uint32 seq = seq_.load(std::memory_order_relaxed);
+    waiters_.fetch_add(1);
+    m.unlock();
+    bool woken = detail::futex_wait_for(seq_, seq, timeout);
+    waiters_.fetch_sub(1);
+    m.lock();
+    return woken || seq_.load(std::memory_order_relaxed) != seq;
+  }
 
   // `guard` is anything with mutex(), e.g. Guarded<T>::Guard.
   template <class Guard>
@@ -58,6 +81,7 @@ class CondVar {
   }
 
  private:
-  alignas(8) unsigned char storage_[detail::kCondVarSize];
+  std::atomic<uint32> seq_{0};
+  std::atomic<uint32> waiters_{0};
 };
 }  // namespace yasl

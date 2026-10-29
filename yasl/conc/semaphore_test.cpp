@@ -1,3 +1,4 @@
+#include <yasl/conc/mutex.h>
 #include <yasl/conc/semaphore.h>
 #include <yasl/conc/thread.h>
 #include <yasl/cont/seq/vector.h>
@@ -68,6 +69,45 @@ YASL_TEST(semaphore_wakes_blocked_thread) {
   s.release();
   t.join();
   CHECK(got.load());
+}
+
+YASL_TEST(semaphore_release_many_wakes_all) {
+  Semaphore s;
+  std::atomic<int> got{0};
+  {
+    Vector<Thread> threads;
+    for (int i = 0; i < 4; ++i) {
+      threads.push_back(Thread([&] {
+        s.acquire();
+        ++got;
+      }));
+    }
+    this_thread::sleep_for(Duration::millis(20));
+    CHECK_EQ(got.load(), 0);
+    s.release(4);
+  }
+  CHECK_EQ(got.load(), 4);
+  CHECK(!s.try_acquire());
+}
+
+YASL_TEST(mutex_is_exclusive) {
+  Mutex m;
+  int64 counter = 0;
+  {
+    Vector<Thread> threads;
+    for (int i = 0; i < 8; ++i) {
+      threads.push_back(Thread([&] {
+        for (int k = 0; k < 20000; ++k) {
+          LockGuard<Mutex> g(m);
+          ++counter;
+        }
+      }));
+    }
+  }
+  CHECK_EQ(counter, int64(8 * 20000));
+  CHECK(m.try_lock());
+  CHECK(!m.try_lock());
+  m.unlock();
 }
 
 YASL_TEST(barrier_rounds) {
