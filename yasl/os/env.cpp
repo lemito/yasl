@@ -4,6 +4,10 @@
 #include <yasl/cont/seq/vector.h>
 #include <yasl/io/file.h>
 
+#if defined(__APPLE__)
+#include <crt_externs.h>
+#endif
+
 namespace yasl::env {
 namespace {
 // Process-lifetime storage that is never destroyed (usable from static
@@ -49,6 +53,13 @@ void init(int argc, const char* const* argv) {
 Span<const String> args() {
   if (!g_ready) {
     Vector<String>& out = storage();
+#if defined(__APPLE__)
+    int argc = *::_NSGetArgc();
+    char** argv = *::_NSGetArgv();
+    for (int i = 0; i < argc; ++i) {
+      out.push_back(String(argv[i], mem::system_resource()));
+    }
+#else
     try {
       String raw = io::read_file("/proc/self/cmdline");
       for (StringView part : raw.view().split('\0')) {
@@ -59,6 +70,7 @@ Span<const String> args() {
       }
     } catch (const Exception&) {
     }
+#endif
     g_ready = true;
   }
   return Span<const String>(storage());

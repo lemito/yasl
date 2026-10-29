@@ -14,7 +14,8 @@ void set_var(StringView name, StringView value);
 void remove_var(StringView name);
 
 // Command-line arguments, program name first (Go os.Args). Read from
-// /proc/self/cmdline, or taken from init() where that is unavailable.
+// /proc/self/cmdline (Linux) or _NSGetArgv (macOS), or taken from init()
+// where neither is available.
 Span<const String> args();
 
 // Optional: hand over main's argc/argv explicitly.
