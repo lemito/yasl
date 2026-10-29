@@ -96,6 +96,10 @@ void destroy(T* first, T* last) noexcept {
   destroy_n(first, size_t(last - first));
 }
 
+constexpr bool is_constant_evaluated() noexcept {
+  return __builtin_is_constant_evaluated();
+}
+
 // Raw memory (the builtins lower to the C runtime)
 
 inline void* mem_copy(void* dst, const void* src, size_t n) noexcept {
@@ -112,6 +116,10 @@ inline void* mem_set(void* dst, int c, size_t n) noexcept {
 
 constexpr int mem_compare(const void* a, const void* b, size_t n) noexcept {
   return __builtin_memcmp(a, b, n);
+}
+
+inline const void* mem_find(const void* p, int c, size_t n) noexcept {
+  return __builtin_memchr(p, c, n);
 }
 
 constexpr size_t str_length(const char* s) noexcept {

@@ -48,3 +48,23 @@ YASL_TEST(math_narrow_and_bits) {
   CHECK_EQ(countr_zero(uint32(0)), 32);
   CHECK_EQ(bit_width(uint32(255)), 8);
 }
+
+YASL_TEST(math_mul_wide) {
+  static_assert(mul_wide(~uint64(0), ~uint64(0)).hi == ~uint64(0) - 1);
+  static_assert(mul_wide(~uint64(0), ~uint64(0)).lo == 1);
+  static_assert(mul_wide(uint64(1) << 63, 4).hi == 2);
+  uint64 x = 0x9E3779B97F4A7C15ull;
+  for (int i = 0; i < 1000; ++i) {
+    x ^= x << 13;
+    x ^= x >> 7;
+    x ^= x << 17;
+    uint64 a = x;
+    uint64 b = x * 0xD6E8FEB86659FD93ull;
+    uint64 al = uint32(a), ah = a >> 32, bl = uint32(b), bh = b >> 32;
+    uint64 mid = ((al * bl) >> 32) + uint32(al * bh) + uint32(ah * bl);
+    WideProduct p = mul_wide(a, b);
+    CHECK_EQ(p.lo, a * b);
+    CHECK_EQ(p.hi,
+             ah * bh + ((al * bh) >> 32) + ((ah * bl) >> 32) + (mid >> 32));
+  }
+}
