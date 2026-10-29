@@ -1,0 +1,8 @@
+option('malloc', type: 'combo', choices: ['libc', 'tcmalloc', 'custom'], value: 'libc',
+  description: 'System allocator behind yasl::mem (CMake: YASL_MALLOC)')
+option('default_alloc', type: 'combo', choices: ['sys', 'chain'], value: 'sys',
+  description: 'Default resource: sys or chain (CMake: YASL_DEFAULT_ALLOC)')
+option('tcmalloc_lib', type: 'string', value: '',
+  description: 'google/tcmalloc archive for malloc=tcmalloc (default: third_party/tcmalloc_build/lib/libtcmalloc_google.a)')
+option('tests', type: 'boolean', value: true, description: 'Build the tests')
+option('bench', type: 'boolean', value: false, description: 'Build the benchmarks (needs Abseil)')
