@@ -242,3 +242,23 @@ YASL_TEST(hashmap_object_is_one_pointer) {
   CHECK_EQ(own.stats().live(), size_t(0));
   CHECK_EQ(up.stats().live(), size_t(0));
 }
+
+YASL_TEST(hash_bytes_every_length) {
+  unsigned char buf[200];
+  for (size_t i = 0; i < sizeof(buf); ++i) {
+    buf[i] = (unsigned char)(i * 37 + 11);
+  }
+  for (size_t n = 0; n <= sizeof(buf); ++n) {
+    uint64 h = hash_bytes(buf, n);
+    CHECK_EQ(h, hash_bytes(buf, n));
+    CHECK(h != hash_bytes(buf, n, 1));
+    if (n > 0) {
+      CHECK(h != hash_bytes(buf, n - 1));
+    }
+    for (size_t i = 0; i < n; ++i) {
+      buf[i] ^= 1;
+      CHECK(h != hash_bytes(buf, n));
+      buf[i] ^= 1;
+    }
+  }
+}

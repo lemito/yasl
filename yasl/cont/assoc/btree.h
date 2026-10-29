@@ -49,6 +49,9 @@ class BTree {
       sizeof(key_type) <= 16 ? 32 : (sizeof(key_type) <= 64 ? 16 : 8);
   static constexpr uint32 kFanMin = kFan / 2;
   static constexpr uint32 kMaxDepth = 64;
+  template <class Q>
+  static constexpr bool kCountSearch =
+      Integral<key_type> && Integral<Q> && SameAs<Cmp, Less>;
 
   struct Inner;
 
@@ -578,6 +581,13 @@ class BTree {
   // Child to descend into: first i with key < keys[i] (all keys[i - 1] <= key).
   template <class Q>
   uint32 child_index(Inner* in, const Q& key) const noexcept {
+    if constexpr (kCountSearch<Q>) {
+      uint32 r = 0;
+      for (uint32 i = 0; i < in->count; ++i) {
+        r += !(key < *in->key(i));
+      }
+      return r;
+    }
     uint32 lo = 0;
     uint32 hi = in->count;
     while (lo < hi) {
@@ -604,6 +614,13 @@ class BTree {
   // First index in n with !(key_at(i) < key).
   template <class Q>
   uint32 lower_index(Leaf* n, const Q& key) const noexcept {
+    if constexpr (kCountSearch<Q>) {
+      uint32 r = 0;
+      for (uint32 i = 0; i < n->count; ++i) {
+        r += key_at(n, i) < key;
+      }
+      return r;
+    }
     uint32 lo = 0;
     uint32 hi = n->count;
     while (lo < hi) {
@@ -620,6 +637,13 @@ class BTree {
   // First index in n with key < key_at(i).
   template <class Q>
   uint32 upper_index(Leaf* n, const Q& key) const noexcept {
+    if constexpr (kCountSearch<Q>) {
+      uint32 r = 0;
+      for (uint32 i = 0; i < n->count; ++i) {
+        r += !(key < key_at(n, i));
+      }
+      return r;
+    }
     uint32 lo = 0;
     uint32 hi = n->count;
     while (lo < hi) {

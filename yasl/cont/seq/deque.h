@@ -274,7 +274,7 @@ class Deque {
   void pop_front() noexcept {
     YASL_ASSERT(size_ > 0);
     yasl::destroy_at(buf_ + head_);
-    head_ = (head_ + 1) % cap_;
+    head_ = head_ + 1 == cap_ ? 0 : head_ + 1;
     --size_;
   }
 

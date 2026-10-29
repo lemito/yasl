@@ -8,42 +8,83 @@
 
 #include <initializer_list>  // language support for braced lists
 
+#ifndef YASL_HASH_SSE2
+#if defined(__SSE2__) || defined(_M_X64) || \
+    (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
+#define YASL_HASH_SSE2 1
+#else
+#define YASL_HASH_SSE2 0
+#endif
+#endif
+#if YASL_HASH_SSE2
+#include <emmintrin.h>
+#endif
+
 #include "map.h"
 
 namespace yasl {
 namespace detail {
-static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__,
-              "HashTable groups assume little-endian");
-
 // Control bytes: 0..0x7F = slot is full (low 7 bits of the hash), kEmpty,
 // kDeleted.
 inline constexpr uint8 kEmpty = 0xFF;
 inline constexpr uint8 kDeleted = 0x80;
+inline constexpr char kSeedAnchor = 0;
+
+#if YASL_HASH_SSE2
+using Group = __m128i;
+inline constexpr size_t kGroup = 16;
+inline constexpr int kMaskBits = 1;
+
+inline Group load_group(const uint8* p) noexcept {
+  return _mm_loadu_si128(reinterpret_cast<const __m128i*>(p));
+}
+
+inline uint64 match_byte(Group g, uint8 b) noexcept {
+  return uint32(_mm_movemask_epi8(_mm_cmpeq_epi8(g, _mm_set1_epi8(char(b)))));
+}
+
+inline uint64 match_empty(Group g) noexcept { return match_byte(g, kEmpty); }
+
+inline uint64 match_free(Group g) noexcept {
+  return uint32(_mm_movemask_epi8(g));
+}
+
+inline uint64 match_full(Group g) noexcept { return ~match_free(g) & 0xFFFF; }
+#else
+using Group = uint64;
+inline constexpr size_t kGroup = 8;
+inline constexpr int kMaskBits = 8;
 inline constexpr uint64 kLo = 0x0101010101010101ull;
 inline constexpr uint64 kHi = 0x8080808080808080ull;
-inline constexpr size_t kGroup = 8;
 
-inline uint64 load_group(const uint8* p) noexcept {
-  uint64 g;
-  yasl::mem_copy(&g, p, sizeof(g));
+inline Group load_group(const uint8* p) noexcept {
+  uint64 g = 0;
+  for (size_t k = 0; k < kGroup; ++k) {
+    g |= uint64(p[k]) << (8 * k);
+  }
   return g;
 }
 
 // Bytes equal to b (may report a false positive above a real match; callers
 // compare keys).
-inline uint64 match_byte(uint64 g, uint8 b) noexcept {
+inline uint64 match_byte(Group g, uint8 b) noexcept {
   uint64 x = g ^ (kLo * b);
   return (x - kLo) & ~x & kHi;
 }
 
-inline uint64 match_empty(uint64 g) noexcept { return g & (g << 1) & kHi; }
+inline uint64 match_empty(Group g) noexcept { return g & (g << 1) & kHi; }
 
-inline uint64 match_free(uint64 g) noexcept { return g & kHi; }
+inline uint64 match_free(Group g) noexcept { return g & kHi; }
 
-inline uint64 match_full(uint64 g) noexcept { return ~g & kHi; }
+inline uint64 match_full(Group g) noexcept { return ~g & kHi; }
+#endif
 
-inline size_t first_byte(uint64 mask) noexcept {
-  return size_t(__builtin_ctzll(mask)) / 8;
+inline size_t first_slot(uint64 mask) noexcept {
+  return size_t(countr_zero(mask)) / kMaskBits;
+}
+
+inline size_t slots_after_last(uint64 mask) noexcept {
+  return size_t(countl_zero(mask) - (64 - int(kGroup) * kMaskBits)) / kMaskBits;
 }
 
 constexpr size_t max_items(size_t cap) noexcept { return cap - cap / 8; }
@@ -65,17 +106,23 @@ struct EmptyBlock {
   uint8 ctrl[kGroup];
 };
 
-inline EmptyBlock kEmptyBlock = {
-    {0, 0, 0, nullptr},
-    {kEmpty, kEmpty, kEmpty, kEmpty, kEmpty, kEmpty, kEmpty, kEmpty}};
+constexpr EmptyBlock make_empty_block() noexcept {
+  EmptyBlock b{{0, 0, 0, nullptr}, {}};
+  for (uint8& c : b.ctrl) {
+    c = kEmpty;
+  }
+  return b;
+}
+
+inline EmptyBlock kEmptyBlock = make_empty_block();
 }  // namespace detail
 
 // Hash table with open addressing in the style of Swiss tables: one control
-// byte per slot (7 bits of the hash or empty/deleted) probed eight at a time
-// with plain 64-bit arithmetic, triangular probing, 7/8 maximum load. Slots,
-// bookkeeping and control bytes share one allocation, and the object is a
-// single pointer (an empty table points to a static block and allocates
-// nothing).
+// byte per slot (7 bits of the hash or empty/deleted) probed a group at a
+// time (16 with SSE2, otherwise 8 with 64-bit arithmetic), triangular probing,
+// 7/8 maximum load. Slots, bookkeeping and control bytes share one allocation,
+// and the object is a single pointer (an empty table points to a static block
+// and allocates nothing).
 //
 // Iterators, pointers and references are invalidated by any insertion that
 // rehashes; erasing never moves other elements. Iteration order is unspecified.
@@ -410,7 +457,8 @@ class HashTable {
 
   template <class Q>
   uint64 hash_of(const Q& key) const noexcept {
-    return mix64(uint64(hash_(key)) ^ process_seed());
+    uint64 seed = uint64(reinterpret_cast<uintptr_t>(&detail::kSeedAnchor));
+    return yasl::detail::mum(uint64(hash_(key)) ^ seed, 0x9E3779B97F4A7C15ull);
   }
 
   void set_ctrl(size_t i, uint8 c) noexcept {
@@ -425,7 +473,7 @@ class HashTable {
     while (i < hdr().cap) {
       uint64 m = detail::match_full(detail::load_group(ctrl_ + i));
       if (m) {
-        size_t r = i + detail::first_byte(m);
+        size_t r = i + detail::first_slot(m);
         return r < hdr().cap ? r : hdr().cap;
       }
       i += detail::kGroup;
@@ -443,9 +491,9 @@ class HashTable {
     size_t pos = size_t(h) & mask;
     size_t stride = 0;
     for (;;) {
-      uint64 g = detail::load_group(ctrl_ + pos);
+      auto g = detail::load_group(ctrl_ + pos);
       for (uint64 m = detail::match_byte(g, h2); m; m &= m - 1) {
-        size_t i = (pos + detail::first_byte(m)) & mask;
+        size_t i = (pos + detail::first_slot(m)) & mask;
         if (eq_(key_of(*slot(i)), key)) {
           return i;
         }
@@ -466,7 +514,7 @@ class HashTable {
     for (;;) {
       uint64 m = detail::match_free(detail::load_group(ctrl_ + pos));
       if (m) {
-        return (pos + detail::first_byte(m)) & mask;
+        return (pos + detail::first_slot(m)) & mask;
       }
       stride += detail::kGroup;
       pos = (pos + stride) & mask;
@@ -501,8 +549,8 @@ class HashTable {
     uint64 before = detail::match_empty(
         detail::load_group(ctrl_ + ((i - detail::kGroup) & (hdr().cap - 1))));
     uint64 after = detail::match_empty(detail::load_group(ctrl_ + i));
-    size_t lead = before ? size_t(__builtin_clzll(before)) / 8 : detail::kGroup;
-    size_t trail = after ? detail::first_byte(after) : detail::kGroup;
+    size_t lead = before ? detail::slots_after_last(before) : detail::kGroup;
+    size_t trail = after ? detail::first_slot(after) : detail::kGroup;
     if (lead + trail >= detail::kGroup) {
       set_ctrl(i, detail::kDeleted);
     } else {
