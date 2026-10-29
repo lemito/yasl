@@ -42,13 +42,19 @@ target_include_directories(yasl PUBLIC
     $<INSTALL_INTERFACE:include>)
 target_compile_features(yasl PUBLIC cxx_std_20)
 target_link_libraries(yasl PUBLIC Threads::Threads)
+if(WIN32)
+    target_link_libraries(yasl PUBLIC synchronization)
+endif()
 
 if(YASL_MALLOC STREQUAL "tcmalloc")
-    find_library(YASL_TCMALLOC_LIB NAMES tcmalloc_minimal tcmalloc)
-    if(NOT YASL_TCMALLOC_LIB)
-        message(FATAL_ERROR "YASL_MALLOC=tcmalloc needs gperftools (e.g. apt install libgoogle-perftools-dev)")
+    set(YASL_TCMALLOC_LIB "${CMAKE_CURRENT_SOURCE_DIR}/third_party/tcmalloc_build/lib/libtcmalloc_google.a"
+        CACHE FILEPATH "google/tcmalloc static archive for YASL_MALLOC=tcmalloc")
+    if(NOT EXISTS "${YASL_TCMALLOC_LIB}")
+        message(FATAL_ERROR "YASL_MALLOC=tcmalloc needs ${YASL_TCMALLOC_LIB}: run third_party/tcmalloc_build/build.sh (needs Bazel and the third_party/tcmalloc submodule)")
     endif()
-    target_link_libraries(yasl PUBLIC ${YASL_TCMALLOC_LIB})
+    add_library(yasl_tcmalloc STATIC IMPORTED)
+    set_target_properties(yasl_tcmalloc PROPERTIES IMPORTED_LOCATION "${YASL_TCMALLOC_LIB}")
+    target_link_libraries(yasl PUBLIC "$<BUILD_INTERFACE:$<LINK_LIBRARY:WHOLE_ARCHIVE,yasl_tcmalloc>>")
     target_compile_definitions(yasl PUBLIC YASL_MALLOC_TCMALLOC)
 endif()
 
@@ -99,13 +105,18 @@ if(YASL_BUILD_TESTS)
     add_test(NAME yasl_tests COMMAND yasl_tests)
     add_test(NAME yasl_include_policy
         COMMAND ${CMAKE_COMMAND} -DROOT=${CMAKE_CURRENT_SOURCE_DIR} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_includes.cmake)
+    add_test(NAME yasl_build_lists
+        COMMAND ${CMAKE_COMMAND} -DROOT=${CMAKE_CURRENT_SOURCE_DIR} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_build_lists.cmake)
     add_test(NAME yasl_format_compile_fail
         COMMAND ${CMAKE_COMMAND} -DCXX=${CMAKE_CXX_COMPILER} -DROOT=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_compile_fail.cmake)
 endif()
 
-# Benchmarks: not part of ctest.
 if(YASL_BUILD_BENCH)
-    add_executable(yasl_bench yasl/bench/bench.cpp)
-    target_link_libraries(yasl_bench PRIVATE yasl)
+    find_package(absl CONFIG REQUIRED)
+    file(GLOB YASL_BENCH_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/yasl/bench/*.cpp)
+    add_executable(yasl_bench ${YASL_BENCH_SOURCES})
+    target_link_libraries(yasl_bench PRIVATE yasl
+        absl::flat_hash_map absl::btree absl::inlined_vector
+        absl::hash absl::str_format absl::strings)
 endif()
