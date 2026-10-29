@@ -14,6 +14,10 @@
 #include <thread>
 #include <vector>
 
+#include "yasl/core/exception.h"
+#include "yasl/io/error.h"
+#include "yasl/str/view.h"
+
 using namespace yasl;
 using namespace yasl::literals;
 
@@ -356,4 +360,25 @@ YASL_TEST(io_tee_output) {
   tee.flush();
   CHECK_EQ(a.take(), "x=42\n   7");
   CHECK_EQ(b.take(), "x=42\n   7");
+}
+
+YASL_TEST(io_file_test) {
+  try {
+    io::FileInput in("no_this.file");
+  } catch (yasl::io::Error& e) {
+    io::err() << StringView(e.what());
+    return;
+  }
+  io::FileOutput out("out.txt");
+  out << "A" << (10 + 2) << '\n';
+
+  io::FileInput in("out.txt");
+  String line;
+  if (!in.read_line(line)) {
+    io::err() << StringView("Empty file");
+    return;
+  }
+  CHECK_EQ(line[0], 'A');
+  CHECK_EQ(line[1], '1');
+  CHECK_EQ(line[2], '2');
 }

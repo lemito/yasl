@@ -1,6 +1,8 @@
 #include <yasl/io/buffer.h>
 #include <yasl/mem/tracking.h>
 #include <yasl/test/test.h>
+#include <cstdio>
+#include "yasl/mem/arena.h"
 
 using namespace yasl;
 
