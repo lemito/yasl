@@ -229,6 +229,13 @@ class StringView {
   constexpr bool contains(char c) const noexcept { return find(c) != npos; }
 
   constexpr size_t find(char c, size_t pos = 0) const noexcept {
+    if (!is_constant_evaluated()) {
+      if (pos >= n_) {
+        return npos;
+      }
+      const void* hit = mem_find(p_ + pos, c, n_ - pos);
+      return hit ? size_t(static_cast<const char*>(hit) - p_) : npos;
+    }
     for (size_t i = pos; i < n_; ++i) {
       if (p_[i] == c) {
         return i;
@@ -242,6 +249,20 @@ class StringView {
       return pos <= n_ ? pos : npos;
     }
     if (s.n_ > n_) {
+      return npos;
+    }
+    if (!is_constant_evaluated()) {
+      const char* last = p_ + (n_ - s.n_);
+      for (const char* q = p_ + pos; q <= last; ++q) {
+        q = static_cast<const char*>(
+            mem_find(q, s.p_[0], size_t(last - q) + 1));
+        if (!q) {
+          return npos;
+        }
+        if (mem_compare(q + 1, s.p_ + 1, s.n_ - 1) == 0) {
+          return size_t(q - p_);
+        }
+      }
       return npos;
     }
     for (size_t i = pos; i + s.n_ <= n_; ++i) {

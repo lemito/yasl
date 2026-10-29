@@ -141,9 +141,9 @@ class StringBuilder final : public io::Output {
 template <class... Args>
 String format(io::FormatString<TypeIdentity<Args>...> fmt,
               const Args&... args) {
-  StringBuilder b;
-  b.format(fmt, args...);
-  return b.take();
+  io::detail::ScratchOutput out;
+  out.format(fmt, args...);
+  return String(out.view());
 }
 
 // Any printable value to a String.

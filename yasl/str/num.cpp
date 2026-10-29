@@ -1,6 +1,7 @@
 #include "num.h"
 
 #include <yasl/core/check.h>
+#include <yasl/core/math.h>
 
 namespace yasl::num {
 namespace {
@@ -362,8 +363,86 @@ void precision_digits(Decomposed v, int count, char* digits,
   k_out = k;
 }
 
+struct U128 {
+  uint64 lo;
+  uint64 hi;
+};
+
+U128 shift_right_round(U128 q, int sh) noexcept {
+  int k = sh - 1;
+  bool half = k < 64 ? (q.lo >> k) & 1 : (q.hi >> (k - 64)) & 1;
+  bool sticky = k < 64
+                    ? (q.lo & ((uint64(1) << k) - 1)) != 0
+                    : q.lo != 0 || (q.hi & ((uint64(1) << (k - 64)) - 1)) != 0;
+  if (sh < 64) {
+    q.lo = (q.lo >> sh) | (q.hi << (64 - sh));
+    q.hi >>= sh;
+  } else {
+    q.lo = q.hi >> (sh - 64);
+    q.hi = 0;
+  }
+  if (half && (sticky || (q.lo & 1))) {
+    q.hi += ++q.lo == 0;
+  }
+  return q;
+}
+
+uint32 div_1e9(U128& q) noexcept {
+  constexpr uint64 k = 1000000000;
+  uint64 limbs[4] = {q.hi >> 32, uint32(q.hi), q.lo >> 32, uint32(q.lo)};
+  uint64 r = 0;
+  for (uint64& l : limbs) {
+    uint64 cur = (r << 32) | l;
+    l = cur / k;
+    r = cur % k;
+  }
+  q.hi = (limbs[0] << 32) | limbs[1];
+  q.lo = (limbs[2] << 32) | limbs[3];
+  return uint32(r);
+}
+
+bool fixed_digits_fast(Decomposed v, int frac, char* digits, int& n) noexcept {
+  if (frac > 19 || v.e > 10 || v.e < -116) {
+    return false;
+  }
+  uint64 p10 = 1;
+  for (int i = 0; i < frac; ++i) {
+    p10 *= 10;
+  }
+  WideProduct m = mul_wide(v.f, p10);
+  U128 q{m.lo, m.hi};
+  if (v.e > 0) {
+    q.hi = (q.hi << v.e) | (q.lo >> (64 - v.e));
+    q.lo <<= v.e;
+  } else if (v.e < 0) {
+    q = shift_right_round(q, -v.e);
+  }
+  char tmp[48];
+  int k = 0;
+  while (q.hi != 0) {
+    uint32 chunk = div_1e9(q);
+    for (int i = 0; i < 9; ++i) {
+      tmp[k++] = char('0' + chunk % 10);
+      chunk /= 10;
+    }
+  }
+  uint64 low = q.lo;
+  do {
+    tmp[k++] = char('0' + low % 10);
+    low /= 10;
+  } while (low);
+  for (int i = 0; i < k; ++i) {
+    digits[i] = tmp[k - 1 - i];
+  }
+  n = k;
+  return true;
+}
+
 // Decimal digits of round(value * 10^frac), no leading zeros ("0" for zero).
 int fixed_digits(Decomposed v, int frac, char* digits) noexcept {
+  if (int n; fixed_digits_fast(v, frac, digits, n)) {
+    return n;
+  }
   Big q;
   q.set(v.f);
   q.mul_pow10(frac);
@@ -764,8 +843,52 @@ constexpr double kExactPow10[] = {
     1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22};
 }  // namespace
 
+namespace {
+constexpr char kDigitPairs[] =
+    "00010203040506070809101112131415161718192021222324252627282930313233343536"
+    "373839"
+    "40414243444546474849505152535455565758596061626364656667686970717273747576"
+    "777879"
+    "8081828384858687888990919293949596979899";
+
+size_t decimal_length(uint64 v) noexcept {
+  size_t n = 1;
+  for (;;) {
+    if (v < 10) return n;
+    if (v < 100) return n + 1;
+    if (v < 1000) return n + 2;
+    if (v < 10000) return n + 3;
+    v /= 10000;
+    n += 4;
+  }
+}
+
+size_t format_decimal(char* buf, uint64 v) noexcept {
+  size_t n = decimal_length(v);
+  char* p = buf + n;
+  while (v >= 100) {
+    size_t i = size_t(v % 100) * 2;
+    v /= 100;
+    p -= 2;
+    p[0] = kDigitPairs[i];
+    p[1] = kDigitPairs[i + 1];
+  }
+  if (v >= 10) {
+    p -= 2;
+    p[0] = kDigitPairs[v * 2];
+    p[1] = kDigitPairs[v * 2 + 1];
+  } else {
+    *--p = char('0' + v);
+  }
+  return n;
+}
+}  // namespace
+
 size_t format_uint(char* buf, uint64 value, uint32 base, bool upper) noexcept {
   YASL_ASSERT(base >= 2 && base <= 36);
+  if (base == 10) {
+    return format_decimal(buf, value);
+  }
   const char* table = upper ? kUpper : kLower;
   char tmp[kMaxIntChars];
   size_t n = 0;
@@ -848,10 +971,17 @@ bool parse_uint64(StringView text, uint64& magnitude, bool& negative,
     } else {
       return false;
     }
-    if (d >= base || v > (max_value<uint64>() - d) / base) {
+    if (d >= base) {
       return false;
     }
-    v = v * base + d;
+    Optional<uint64> next = checked_mul(v, uint64(base));
+    if (next) {
+      next = checked_add(*next, uint64(d));
+    }
+    if (!next) {
+      return false;
+    }
+    v = *next;
   }
   magnitude = v;
   return true;
