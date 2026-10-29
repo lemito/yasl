@@ -1,0 +1,6 @@
+build --cxxopt=-std=c++17
+build --per_file_copt=external/.*@-w
+build --host_per_file_copt=external/.*@-w
+build --define=absl=1
+build -c opt
+build --force_pic
