@@ -1,18 +1,19 @@
+#include <yasl/conc/atomic.h>
 #include <yasl/conc/thread.h>
 #include <yasl/cont/seq/vector.h>
 #include <yasl/mem/tracking.h>
 #include <yasl/test/test.h>
 
-#include <atomic>
+#include "yasl/conc/mutex.h"
 
 using namespace yasl;
 using namespace yasl::literals;
 
 YASL_TEST(thread_join_and_destructor) {
-  std::atomic<int> n{0};
+  yasl::Atomic<int> n{0};
   {
-    Thread a([&] { n += 1; });
-    Thread b([&] { n += 10; });
+    Thread a([&] { n.fetch_add(1); });
+    Thread b([&] { n.fetch_add(10); });
     CHECK(a.joinable());
     a.join();
     CHECK(!a.joinable());
@@ -22,7 +23,7 @@ YASL_TEST(thread_join_and_destructor) {
 }
 
 YASL_TEST(thread_many_and_move) {
-  std::atomic<int> n{0};
+  Atomic<int> n{0};
   {
     Vector<Thread> threads;
     for (int i = 0; i < 8; ++i) {
@@ -41,10 +42,10 @@ YASL_TEST(thread_many_and_move) {
 
 YASL_TEST(thread_big_capture_no_leak) {
   mem::Tracking t;
-  std::atomic<long> sum{0};
+  Atomic<long> sum{0};
   {
     long pad[16] = {1, 2, 3};
-    Thread th([&sum, pad] { sum = pad[0] + pad[1] + pad[2]; }, &t);
+    Thread th([&sum, pad] { sum.store(pad[0] + pad[1] + pad[2]); }, &t);
     th.join();
     CHECK_EQ(sum.load(), 6L);
   }
@@ -52,10 +53,10 @@ YASL_TEST(thread_big_capture_no_leak) {
 }
 
 YASL_TEST(thread_detach_and_sleep) {
-  std::atomic<bool> done{false};
+  Atomic<bool> done{false};
   Thread th([&] {
     this_thread::sleep_for(5_ms);
-    done = true;
+    done.store(true);
   });
   th.detach();
   CHECK(!th.joinable());
@@ -69,4 +70,18 @@ YASL_TEST(thread_detach_and_sleep) {
   CHECK(s.elapsed() >= 20_ms);
   CHECK(Thread::hardware_concurrency() >= 1u);
   CHECK(this_thread::id() != 0);
+}
+
+YASL_TEST(thread_vector) {
+  Vector<Thread> threads;
+  yasl::Mutex m;
+  long n = 0;
+  for (int i = 0; i < 8; ++i) {
+    threads.push_back(Thread([&] {
+      for (int k = 0; k < 1000; ++k) {
+        yasl::LockGuard<yasl::Mutex> l(m);
+        n++;
+      }
+    }));
+  }
 }
