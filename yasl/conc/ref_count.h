@@ -19,6 +19,7 @@ class RefCount {
   bool unref() noexcept {
     // Sole owner: nobody else can increment the counter, so skip the RMW.
     if (n_.load(std::memory_order_acquire) == 1) {
+      n_.store(0, std::memory_order_release);
       return true;
     }
     return n_.fetch_sub(1, std::memory_order_acq_rel) == 1;

@@ -73,8 +73,8 @@ YASL_TEST(thread_detach_and_sleep) {
 }
 
 YASL_TEST(thread_vector) {
-  Vector<Thread> threads;
   yasl::Mutex m;
+  Vector<Thread> threads;
   long n = 0;
   for (int i = 0; i < 8; ++i) {
     threads.push_back(Thread([&] {
@@ -84,4 +84,6 @@ YASL_TEST(thread_vector) {
       }
     }));
   }
+  for (auto& t : threads) t.join();
+  CHECK_EQ(n, 8000L);
 }

@@ -1,4 +1,5 @@
 #include <yasl/cont/adapter/priority_queue.h>
+#include <yasl/cont/seq/vector.h>
 #include <yasl/mem/tracking.h>
 #include <yasl/ptr/unique.h>
 #include <yasl/str/str.h>
@@ -31,12 +32,10 @@ YASL_TEST(pq_min_heap_and_sorted) {
   CHECK_EQ(pq.top(), 1);
   Vector<int> sorted = yasl::move(pq).into_sorted();
   // ascending by Cmp: for Greater that is descending numbers
-  CHECK((std::vector<int>(sorted.begin(), sorted.end()) ==
-         std::vector<int>{8, 6, 4, 1}));
+  CHECK((Vector<int>(sorted.begin(), sorted.end()) == Vector<int>{8, 6, 4, 1}));
   PriorityQueue<int> max{4, 8, 1, 6};
   Vector<int> asc = yasl::move(max).into_sorted();
-  CHECK((std::vector<int>(asc.begin(), asc.end()) ==
-         std::vector<int>{1, 4, 6, 8}));
+  CHECK((Vector<int>(asc.begin(), asc.end()) == Vector<int>{1, 4, 6, 8}));
 }
 
 YASL_TEST(pq_random_vs_std) {
@@ -64,16 +63,16 @@ YASL_TEST(pq_random_vs_std) {
 
 YASL_TEST(pq_heapify_and_move_only) {
   std::mt19937 rng(8);
-  std::vector<int> data(10000);
+  Vector<int> data(10000);
   for (int& x : data) {
     x = int(rng() % 1000);
   }
   PriorityQueue<int> pq(data.begin(), data.end());
-  std::vector<int> out;
+  Vector<int> out;
   while (auto x = pq.pop()) {
     out.push_back(*x);
   }
-  std::sort(data.rbegin(), data.rend());
+  std::sort(data.begin(), data.end(), Greater{});
   CHECK(out == data);
 
   mem::Tracking t;

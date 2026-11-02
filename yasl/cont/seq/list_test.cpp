@@ -1,18 +1,17 @@
 #include <yasl/cont/seq/list.h>
+#include <yasl/cont/seq/vector.h>
 #include <yasl/mem/tracking.h>
 #include <yasl/ptr/unique.h>
 #include <yasl/rand/random.h>
 #include <yasl/str/str.h>
 #include <yasl/test/test.h>
 
-#include <vector>
-
 using namespace yasl;
 
 namespace {
 template <class L>
-std::vector<int> items(const L& l) {
-  std::vector<int> out;
+Vector<int> items(const L& l) {
+  Vector<int> out;
   for (const auto& x : l) {
     out.push_back(x);
   }
@@ -34,10 +33,10 @@ YASL_TEST(list_basic) {
   CHECK_EQ(l.size(), 3u);
   CHECK_EQ(l.front(), 1);
   CHECK_EQ(l.back(), 3);
-  CHECK(items(l) == (std::vector<int>{1, 2, 3}));
+  CHECK(items(l) == (Vector<int>{1, 2, 3}));
   l.pop_front();
   l.pop_back();
-  CHECK(items(l) == (std::vector<int>{2}));
+  CHECK(items(l) == (Vector<int>{2}));
   l.clear();
   CHECK(l.empty());
   l.push_back(9);
@@ -54,7 +53,7 @@ YASL_TEST(list_insert_erase_iterators_survive) {
   auto next = l.erase(it);
   CHECK_EQ(*next, 3);
   CHECK_EQ(*it3, 3);  // untouched iterator is still valid
-  CHECK(items(l) == (std::vector<int>{1, 2, 3, 4}));
+  CHECK(items(l) == (Vector<int>{1, 2, 3, 4}));
   l.erase(l.begin(), l.end());
   CHECK(l.empty());
 }
@@ -101,14 +100,14 @@ YASL_TEST(list_splice) {
   List<int> b = {10, 20, 30};
   auto it20 = ++b.begin();
   a.splice(++a.begin(), b, it20);
-  CHECK(items(a) == (std::vector<int>{1, 20, 2, 3}));
-  CHECK(items(b) == (std::vector<int>{10, 30}));
+  CHECK(items(a) == (Vector<int>{1, 20, 2, 3}));
+  CHECK(items(b) == (Vector<int>{10, 30}));
   CHECK_EQ(*it20, 20);  // iterator follows the element into `a`
   CHECK_EQ(a.size(), 4u);
   CHECK_EQ(b.size(), 2u);
 
   a.splice(a.end(), b);
-  CHECK(items(a) == (std::vector<int>{1, 20, 2, 3, 10, 30}));
+  CHECK(items(a) == (Vector<int>{1, 20, 2, 3, 10, 30}));
   CHECK(b.empty());
   CHECK_EQ(a.size(), 6u);
   CHECK_EQ(*it20, 20);
@@ -124,12 +123,12 @@ YASL_TEST(list_splice) {
 YASL_TEST(list_reverse_remove_unique) {
   List<int> l = {1, 2, 2, 3, 3, 3, 4};
   CHECK_EQ(l.unique(), 3u);
-  CHECK(items(l) == (std::vector<int>{1, 2, 3, 4}));
+  CHECK(items(l) == (Vector<int>{1, 2, 3, 4}));
   l.reverse();
-  CHECK(items(l) == (std::vector<int>{4, 3, 2, 1}));
+  CHECK(items(l) == (Vector<int>{4, 3, 2, 1}));
   CHECK_EQ(l.back(), 1);
   CHECK_EQ(l.remove_if([](int x) { return x % 2 == 0; }), 2u);
-  CHECK(items(l) == (std::vector<int>{3, 1}));
+  CHECK(items(l) == (Vector<int>{3, 1}));
   CHECK_EQ(l.remove(3), 1u);
   CHECK_EQ(l.size(), 1u);
   List<int> e;

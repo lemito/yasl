@@ -1,4 +1,5 @@
 #include <yasl/cont/assoc/map.h>
+#include <yasl/cont/seq/vector.h>
 #include <yasl/mem/tracking.h>
 #include <yasl/str/str.h>
 #include <yasl/test/test.h>
@@ -207,7 +208,7 @@ YASL_TEST(btree_edge_from_sorted_sizes) {
   mem::Tracking t;
   {
     for (int n : {0, 1, 2}) {
-      std::vector<int> v;
+      Vector<int> v;
       v.reserve(size_t(n));
       for (int i = 0; i < n; ++i) {
         v.push_back(i);

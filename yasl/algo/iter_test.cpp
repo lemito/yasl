@@ -4,8 +4,6 @@
 #include <yasl/str/str.h>
 #include <yasl/test/test.h>
 
-#include <vector>
-
 using namespace yasl;
 using namespace yasl::iter;
 
@@ -13,8 +11,7 @@ YASL_TEST(iter_map_filter_collect) {
   Vector<int> v{1, 2, 3, 4, 5, 6};
   auto out = v | filter([](int x) { return x % 2 == 0; }) |
              map([](int x) { return x * x; }) | collect<Vector>();
-  CHECK((std::vector<int>(out.begin(), out.end()) ==
-         std::vector<int>{4, 16, 36}));
+  CHECK((Vector<int>(out.begin(), out.end()) == Vector<int>{4, 16, 36}));
   auto d = v | take(2) | collect<Deque>();
   CHECK_EQ(d.size(), size_t(2));
   CHECK_EQ(d.back(), 2);
@@ -51,8 +48,7 @@ YASL_TEST(iter_enumerate_zip_reverse_skip) {
   CHECK_EQ(dot, 10 + 40 + 90);
 
   auto rev = xs | reverse() | collect<Vector>();
-  CHECK((std::vector<int>(rev.begin(), rev.end()) ==
-         std::vector<int>{4, 3, 2, 1}));
+  CHECK((Vector<int>(rev.begin(), rev.end()) == Vector<int>{4, 3, 2, 1}));
   auto rest = xs | skip(3) | collect<Vector>();
   CHECK_EQ(rest.size(), size_t(1));
   CHECK_EQ((xs | skip(10) | count()), size_t(0));

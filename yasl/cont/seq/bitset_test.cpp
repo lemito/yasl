@@ -1,4 +1,5 @@
 #include <yasl/cont/seq/bitset.h>
+#include <yasl/cont/seq/vector.h>
 #include <yasl/mem/tracking.h>
 #include <yasl/test/test.h>
 
@@ -21,11 +22,11 @@ YASL_TEST(bitset_basic) {
   s.reset(64);
   s.flip(0);
   CHECK_EQ(s.count(), size_t(3));
-  std::vector<size_t> got;
+  Vector<size_t> got;
   for (size_t i : s) {
     got.push_back(i);
   }
-  CHECK((got == std::vector<size_t>{0, 3, 70}));
+  CHECK((got == Vector<size_t>{0, 3, 70}));
   CHECK_EQ(s.find_first(4), size_t(70));
   CHECK_EQ(s.find_first(71), BitSet::npos);
   s.set(2000, false);  // clearing past the end does not grow

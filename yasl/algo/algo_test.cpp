@@ -1,10 +1,10 @@
 #include <yasl/algo/algo.h>
+#include <yasl/cont/seq/vector.h>
 #include <yasl/mem/tracking.h>
 #include <yasl/str/str.h>
 #include <yasl/test/test.h>
 
 #include <algorithm>
-#include <vector>
 
 using namespace yasl;
 
@@ -19,8 +19,8 @@ struct Rng {
   }
 };
 
-std::vector<int> make(size_t n, int mod, Rng& r) {
-  std::vector<int> v(n);
+Vector<int> make(size_t n, int mod, Rng& r) {
+  Vector<int> v(n);
   for (auto& x : v) {
     x = int(r.next() % uint64(mod));
   }
@@ -42,7 +42,7 @@ YASL_TEST(algo_sort_random) {
 YASL_TEST(algo_sort_shapes) {
   for (size_t n : {size_t(0), size_t(1), size_t(2), size_t(3), size_t(16),
                    size_t(17), size_t(100)}) {
-    std::vector<int> asc(n), desc(n), same(n, 7);
+    Vector<int> asc(n), desc(n), same(n, 7);
     for (size_t i = 0; i < n; ++i) {
       asc[i] = int(i);
       desc[i] = int(n - i);
@@ -54,13 +54,13 @@ YASL_TEST(algo_sort_shapes) {
       CHECK(*v == ref);
     }
   }
-  std::vector<int> v(5000);
+  Vector<int> v(5000);
   for (size_t i = 0; i < v.size(); ++i) {
     v[i] = int(i < v.size() / 2 ? i : v.size() - i);
   }
   auto ref = v;
   yasl::sort(v.begin(), v.end(), [](int a, int b) { return a > b; });
-  std::sort(ref.begin(), ref.end(), std::greater<int>());
+  std::sort(ref.begin(), ref.end(), Greater{});
   CHECK(v == ref);
 }
 
@@ -77,7 +77,7 @@ YASL_TEST(algo_heap_fallback) {
 YASL_TEST(algo_stable_sort) {
   Rng r;
   mem::Tracking t;
-  std::vector<std::pair<int, int>> v(100000);
+  Vector<std::pair<int, int>> v(100000);
   for (size_t i = 0; i < v.size(); ++i) {
     v[i] = {int(r.next() % 50), int(i)};
   }
@@ -94,7 +94,7 @@ YASL_TEST(algo_stable_sort) {
 }
 
 YASL_TEST(algo_sort_strings_by_key) {
-  std::vector<String> v;
+  Vector<String> v;
   for (const char* s :
        {"pear", "fig", "banana", "kiwi", "apple", "plum", "date", "cherry",
         "lime", "mango", "melon", "orange", "peach", "grape", "lemon", "olive",
@@ -125,7 +125,7 @@ YASL_TEST(algo_search_select) {
       CHECK(v[i] >= v[k]);
     }
   }
-  std::vector<int> s = {1, 3, 5, 7, 9};
+  Vector<int> s = {1, 3, 5, 7, 9};
   CHECK_EQ(*yasl::binary_search(s.begin(), s.end(), 7), size_t(3));
   CHECK(!yasl::binary_search(s.begin(), s.end(), 4));
   CHECK(!yasl::binary_search(s.begin(), s.begin(), 4));

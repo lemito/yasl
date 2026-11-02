@@ -350,6 +350,58 @@ YASL_TEST(view_strip_count) {
   CHECK_EQ(StringView("abc").count(""), size_t(0));
 }
 
+YASL_TEST(view_character_set_search) {
+  StringView v = "abc123_xyz";
+  CHECK_EQ(v.find_first_of("0123456789"), size_t(3));
+  CHECK_EQ(v.find_first_of("xyz", 4), size_t(7));
+  CHECK_EQ(v.find_first_not_of("abc"), size_t(3));
+  CHECK_EQ(v.find_last_of("_-"), size_t(6));
+  CHECK_EQ(v.find_last_not_of("xyz"), size_t(6));
+  CHECK_EQ(v.find_first_of(""), StringView::npos);
+  CHECK_EQ(v.find_first_not_of(""), size_t(0));
+}
+
+YASL_TEST(view_split_boundaries) {
+  String joined;
+  size_t count = 0;
+  for (StringView part : "a<>b<>"_sv.split("<>")) {
+    if (count != 0) {
+      joined += '|';
+    }
+    joined += part;
+    ++count;
+  }
+  CHECK_EQ(count, size_t(3));
+  CHECK_EQ(joined, "a|b|");
+
+  joined.clear();
+  count = 0;
+  for (StringView part : "<>"_sv.split("<>")) {
+    if (count != 0) {
+      joined += '|';
+    }
+    joined += part;
+    ++count;
+  }
+  CHECK_EQ(count, size_t(2));
+  CHECK_EQ(joined, "|");
+}
+
+YASL_TEST(string_reserve_detaches_shared_storage) {
+  mem::Tracking t;
+  {
+    String original("a string that exceeds the inline capacity", &t);
+    String copy = original;
+    copy.reserve(copy.size() + 10);
+    CHECK(copy.data() != original.data());
+    CHECK_EQ(copy, original);
+    copy.append("!");
+    CHECK_EQ(original, "a string that exceeds the inline capacity");
+    CHECK_EQ(copy, "a string that exceeds the inline capacity!");
+  }
+  CHECK_EQ(t.stats().live(), size_t(0));
+}
+
 YASL_TEST(string_replace_repeat_case_join) {
   CHECK_EQ(replace_all("a-b-c", "-", "+"), "a+b+c");
   CHECK_EQ(replace_all("aaaa", "aa", "b"), "bb");

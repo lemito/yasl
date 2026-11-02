@@ -1,6 +1,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <yasl/conc/thread.h>
+#include <yasl/cont/seq/vector.h>
 #include <yasl/io/file.h>
 #include <yasl/io/fs.h>
 #include <yasl/io/input.h>
@@ -9,10 +10,7 @@
 #include <yasl/str/builder.h>
 #include <yasl/test/test.h>
 
-#include <cstdio>
-#include <string>
 #include <thread>
-#include <vector>
 
 #include "yasl/core/exception.h"
 #include "yasl/io/error.h"
@@ -173,6 +171,75 @@ YASL_TEST(file_errors) {
   }
 }
 
+YASL_TEST(file_raw_binary_io) {
+  String path = temp_path("raw_binary");
+  const char bytes[] = {'\0', '\x01', '\x7f', '\x80',
+                        '\xff', '\0',   '\x00', '\x42'};
+  {
+    io::File file = io::File::open(
+        path, io::OpenMode::Read | io::OpenMode::Write | io::OpenMode::Create |
+                  io::OpenMode::Truncate);
+    file.write_all(bytes, sizeof(bytes));
+    file.sync();
+    CHECK_EQ(file.size(), uint64(sizeof(bytes)));
+
+    file.seek(0);
+    char first[3] = {};
+    CHECK_EQ(file.read(first, sizeof(first)), sizeof(first));
+    CHECK_EQ(StringView(first, sizeof(first)),
+             StringView(bytes, sizeof(first)));
+
+    char rest[sizeof(bytes) - sizeof(first)] = {};
+    CHECK_EQ(file.read(rest, sizeof(rest)), sizeof(rest));
+    CHECK_EQ(StringView(rest, sizeof(rest)),
+             StringView(bytes + sizeof(first), sizeof(rest)));
+    CHECK_EQ(file.read(rest, sizeof(rest)), size_t(0));
+  }
+  ::unlink(path.c_str());
+}
+
+YASL_TEST(file_open_modes_and_accessors) {
+  String path = temp_path("open_modes");
+  {
+    io::FileOutput out(path, io::OpenMode::Write | io::OpenMode::Create |
+                                io::OpenMode::Truncate);
+    CHECK(out.file().is_open());
+    out << "data";
+  }
+  CHECK_THROWS(
+      io::File::open(path, io::OpenMode::Write | io::OpenMode::Create |
+                              io::OpenMode::Exclusive),
+      io::Error);
+  {
+    io::FileInput in(io::File::open(path, io::OpenMode::Read), 0);
+    CHECK(in.file().is_open());
+    CHECK_EQ(in.read_all(), "data");
+  }
+  ::unlink(path.c_str());
+}
+
+YASL_TEST(file_buffered_binary_roundtrip) {
+  String path = temp_path("buffered_binary");
+  const char bytes[] = {'h', '\0', 'e', '\0', 'l', 'l', '\0', 'o'};
+  {
+    io::FileOutput out(
+        io::File::open(path, io::OpenMode::Write | io::OpenMode::Create |
+                                 io::OpenMode::Truncate),
+        2);
+    out.write(StringView(bytes, sizeof(bytes)));
+    out.flush();
+  }
+  {
+    io::FileInput in(io::File::open(path, io::OpenMode::Read), 2);
+    char result[sizeof(bytes)] = {};
+    CHECK(in.read_exact(result, sizeof(result)));
+    CHECK_EQ(StringView(result, sizeof(result)),
+             StringView(bytes, sizeof(bytes)));
+    CHECK_EQ(in.get(), -1);
+  }
+  ::unlink(path.c_str());
+}
+
 YASL_TEST(file_large_unbuffered_writes) {
   String path = temp_path("large");
   String big(200000, 'z');
@@ -196,7 +263,7 @@ YASL_TEST(shared_output_lines_do_not_interleave) {
   constexpr int kLines = 1500;
   {
     io::SharedOutput shared{StringView(path.view())};
-    std::vector<std::thread> threads;
+    Vector<std::thread> threads;
     for (int t = 0; t < kThreads; ++t) {
       threads.emplace_back([&shared, t] {
         for (int k = 0; k < kLines; ++k) {
@@ -210,23 +277,25 @@ YASL_TEST(shared_output_lines_do_not_interleave) {
     shared.flush();
   }
   String all = io::read_file(path.view());
-  std::vector<int> seen(kThreads, 0);
+  Vector<int> seen(kThreads, 0);
   size_t lines = 0;
   for (StringView rest = all.view(); !rest.empty();) {
     size_t nl = rest.find('\n');
     CHECK(nl != StringView::npos);
     StringView line = rest.first(nl);
     rest = rest.drop_front(nl + 1);
-    int t = -1;
-    int k = -1;
-    char tail[64] = {};
     // "thread=T line=K -----...-----end"
-    std::string s(line.data(), line.size());
-    CHECK(std::sscanf(s.c_str(), "thread=%d line=%d %63s", &t, &k, tail) == 3);
-    CHECK(t >= 0 && t < kThreads);
-    CHECK_EQ(k, seen[size_t(t)]);
-    CHECK_EQ(std::string(tail), std::string(37, '-') + "end");
-    ++seen[size_t(t)];
+    auto first = line.split_once(' ');
+    CHECK(first.has_value());
+    auto second = first->second.split_once(' ');
+    CHECK(second.has_value());
+    auto t = first->first.strip_prefix("thread=")->parse<int>();
+    auto k = second->first.strip_prefix("line=")->parse<int>();
+    CHECK(t.has_value() && k.has_value());
+    CHECK(*t >= 0 && *t < kThreads);
+    CHECK_EQ(seen[size_t(*t)], *k);
+    CHECK_EQ(second->second, String(37, '-') + "end");
+    ++seen[size_t(*t)];
     ++lines;
   }
   CHECK_EQ(lines, size_t(kThreads * kLines));
@@ -237,7 +306,7 @@ YASL_TEST(locked_keeps_pieces_together) {
   String path = temp_path("locked");
   {
     io::SharedOutput shared{StringView(path.view())};
-    std::vector<std::thread> threads;
+    Vector<std::thread> threads;
     for (int t = 0; t < 4; ++t) {
       threads.emplace_back([&shared, t] {
         for (int k = 0; k < 500; ++k) {
@@ -297,6 +366,44 @@ YASL_TEST(input_read_exact) {
   CHECK(!in.read_exact(buf, 4));
   CHECK_EQ(StringView(buf, 2), "ef");
   CHECK(!in.ok());
+}
+
+YASL_TEST(input_rejects_oversized_token) {
+  String token(513, '1');
+  io::StringInput in(token);
+  int value = 0;
+  CHECK(!(in >> value));
+  CHECK_EQ(value, 0);
+  CHECK(!in.ok());
+}
+
+YASL_TEST(input_small_buffer_boundaries) {
+  String path = temp_path("small_buffer");
+  io::write_file(path, " one\t two\r\nthree");
+
+  io::FileInput in(io::File::open(path.view(), io::OpenMode::Read), 3);
+  String word;
+  CHECK(in.read_word(word));
+  CHECK_EQ(word, "one");
+  CHECK(in.read_word(word));
+  CHECK_EQ(word, "two");
+
+  String line;
+  CHECK(in.read_line(line));
+  CHECK_EQ(line, "");
+  CHECK(in.read_line(line));
+  CHECK_EQ(line, "three");
+  CHECK(!in.read_line(line));
+  CHECK(in.eof());
+  ::unlink(path.c_str());
+}
+
+YASL_TEST(runtime_format_errors) {
+  StringBuilder out;
+  CHECK_THROWS(out.format(io::runtime_format("{"), 1), FormatError);
+  CHECK_THROWS(out.format(io::runtime_format("{:.}"), 1.0), FormatError);
+  CHECK_THROWS(out.format(io::runtime_format("{} {}"), 1), FormatError);
+  CHECK_THROWS(out.format(io::runtime_format("{:1"), 1), FormatError);
 }
 
 YASL_TEST(io_copy_between_streams) {
