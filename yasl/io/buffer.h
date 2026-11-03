@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
+
 #include <yasl/core/check.h>
 #include <yasl/core/utility.h>
 #include <yasl/mem/resource.h>
@@ -15,7 +17,7 @@ namespace yasl::io {
 //     while (auto line = next_line(buf.readable())) {
 //         buf.consume(line->size() + 1);
 //     }
-class Buffer {
+class Buffer : MoveOnly {
  public:
   Buffer() noexcept : res_(mem::default_resource()) {}
   explicit Buffer(mem::Resource* res) noexcept : res_(res) {}

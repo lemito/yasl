@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
 #include "resource.h"
 
 namespace yasl::mem {
@@ -9,7 +10,7 @@ namespace yasl::mem {
 //
 // Slabs are returned to upstream on release() / destruction.
 // Not thread-safe; wrap in Synchronized<Pool> if needed.
-class Pool : public Resource {
+class Pool : NoneCopyable, public Resource {
  public:
   struct Options {
     size_t max_block = 4096;

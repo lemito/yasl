@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
 #include <yasl/time/time.h>
 
 #include <atomic>
@@ -12,7 +13,7 @@ namespace yasl {
 //
 //     auto g = queue.lock();
 //     cv.wait(g, [&] { return !g->empty(); });
-class CondVar {
+class CondVar : NoneCopyable {
  public:
   CondVar() noexcept = default;
 

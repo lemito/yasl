@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
 #include <yasl/core/check.h>
 #include <yasl/core/utility.h>
 
@@ -58,7 +59,7 @@ using ListNode = BasicListNode<true>;
 //     IntrusiveList<Item, ListNode, &Item::hook> items;     // links through a
 //     member
 template <class T, class Node = ListNode, Node T::*Member = nullptr>
-class IntrusiveList {
+class IntrusiveList : MoveOnly {
   template <bool Const>
   class Iter {
     friend class IntrusiveList;

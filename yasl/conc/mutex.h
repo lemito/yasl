@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
 #include <yasl/core/types.h>
 
 #include <atomic>
@@ -7,7 +8,7 @@
 #include "semaphore.h"
 
 namespace yasl {
-class Mutex {
+class Mutex : NoneCopyable {
  public:
   Mutex() noexcept = default;
 
@@ -23,7 +24,7 @@ class Mutex {
 };
 
 // See RwLock<T> for the typed version.
-class RawRwLock {
+class RawRwLock : NoneCopyable {
  public:
   RawRwLock() noexcept = default;
 
@@ -42,7 +43,7 @@ class RawRwLock {
 };
 
 template <class M>
-class LockGuard {
+class LockGuard : NoneCopyable {
  public:
   explicit LockGuard(M& m) noexcept : m_(m) { m_.lock(); }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
 #include <yasl/core/traits.h>
 #include <yasl/core/utility.h>
 #include <yasl/str/num.h>
@@ -340,7 +341,7 @@ FormatArg make_arg(const T& v) noexcept {
 //
 //     out << "x = " << 42 << '\n';
 //     out.format("{:>8} | {:.3f}\n", name, ratio);
-class Output {
+class Output : NoneCopyable {
  public:
   Output() noexcept = default;
   virtual ~Output() = default;

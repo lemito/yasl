@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
+
 #include <yasl/core/check.h>
 
 #include "resource.h"
@@ -86,7 +88,7 @@ class BumpRegion {
 // N bytes of inline storage with bump allocation. Not movable: the region
 // points into the object.
 template <size_t N>
-class StackBuffer {
+class StackBuffer : NoneCopyable {
  public:
   StackBuffer() noexcept : region_(buffer_, N) {}
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
 #include <yasl/core/utility.h>
 #include <yasl/vocab/optional.h>
 
@@ -40,7 +41,7 @@ class Once {
 //     OnceLock<Config> cfg;
 //     const Config& c = cfg.get_or_init([] { return load_config(); });
 template <class T>
-class OnceLock {
+class OnceLock : NoneCopyable {
  public:
   OnceLock() noexcept = default;
 

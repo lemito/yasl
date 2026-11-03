@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
 #include <yasl/core/check.h>
 
 #include "compose.h"
@@ -67,7 +68,7 @@ class CountedStack : public StackBuffer<N> {
 // panics if blocks from the stack buffer are still alive (a container that was
 // moved out of the scope, say).
 template <size_t N>
-class Frame {
+class Frame : NoneCopyable {
  public:
   explicit Frame(Resource* upstream = default_resource()) noexcept
       : scope_(init(upstream)) {}

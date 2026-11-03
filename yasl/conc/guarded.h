@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
 #include <yasl/core/utility.h>
 #include <yasl/vocab/optional.h>
 
@@ -13,9 +14,9 @@ namespace yasl {
 //     { auto g = items.lock(); g->push_back(2); use(*g); }   // unlocked at the
 //     end of the scope
 template <class T>
-class Guarded {
+class Guarded : NoneCopyable {
  public:
-  class Guard {
+  class Guard : NoneCopyable {
    public:
     Guard(const Guard&) = delete;
     Guard& operator=(const Guard&) = delete;
@@ -75,7 +76,7 @@ class Guarded {
 template <class T>
 class RwLock {
  public:
-  class ReadGuard {
+  class ReadGuard : NoneCopyable {
    public:
     ReadGuard(const ReadGuard&) = delete;
     ReadGuard& operator=(const ReadGuard&) = delete;
@@ -101,7 +102,7 @@ class RwLock {
     RwLock* owner_;
   };
 
-  class WriteGuard {
+  class WriteGuard : NoneCopyable {
    public:
     WriteGuard(const WriteGuard&) = delete;
     WriteGuard& operator=(const WriteGuard&) = delete;

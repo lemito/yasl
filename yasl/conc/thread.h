@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
 #include <yasl/core/utility.h>
 #include <yasl/time/time.h>
 #include <yasl/vocab/function.h>
@@ -9,7 +10,7 @@ namespace yasl {
 //
 //     Thread t([&] { work(); });
 //     t.join();                      // or let the destructor do it
-class Thread {
+class Thread : MoveOnly {
  public:
   Thread() noexcept = default;
 

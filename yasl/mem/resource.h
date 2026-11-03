@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
 #include <yasl/core/exception.h>
 #include <yasl/core/types.h>
 #include <yasl/core/utility.h>
@@ -123,7 +124,7 @@ Resource* set_default_resource(Resource* res) noexcept;
 
 // RAII: makes `res` the default resource of the current thread for the scope
 // lifetime.
-class ScopedDefault {
+class ScopedDefault : NoneCopyable {
  public:
   explicit ScopedDefault(Resource* res) noexcept
       : prev_(set_default_resource(res)) {}

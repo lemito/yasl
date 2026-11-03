@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
 #include <yasl/core/check.h>
 #include <yasl/str/num.h>
 #include <yasl/str/str.h>
@@ -16,7 +17,7 @@ namespace yasl::io {
 //     int n; String name;
 //     if (in >> n >> name) ...
 //     for (String line; in.read_line(line);) ...
-class Input {
+class Input : NoneCopyable {
  public:
   Input() noexcept = default;
   virtual ~Input() = default;

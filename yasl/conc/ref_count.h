@@ -1,11 +1,12 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
 #include <atomic>
 #include <cstddef>
 
 namespace yasl {
 // Thread-safe reference counter used by Arc and the copy-on-write String.
-class RefCount {
+class RefCount : NoneCopyable {
  public:
   explicit RefCount(size_t initial = 1) noexcept : n_(initial) {}
 

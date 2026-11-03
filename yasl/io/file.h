@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
+
 #include <yasl/conc/mutex.h>
 #include <yasl/core/exception.h>
 #include <yasl/mem/resource.h>
@@ -30,7 +32,7 @@ constexpr bool has(OpenMode set, OpenMode flag) noexcept {
 }
 
 // Owning (or borrowing) handle to an OS file descriptor. Move-only.
-class File {
+class File : MoveOnly {
  public:
   File() noexcept = default;
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
 #include "compose.h"
 #include "resource.h"
 
@@ -9,7 +10,7 @@ namespace yasl::mem {
 // allocation can be rolled back, which helps growing buffers.
 //
 // Not thread-safe; wrap in Synchronized<Arena> if needed.
-class Arena : public Resource {
+class Arena : NoneCopyable, public Resource {
  public:
   explicit Arena(Resource* upstream = default_resource(),
                  size_t first_chunk = 4096) noexcept;

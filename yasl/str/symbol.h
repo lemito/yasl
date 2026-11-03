@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
 #include <yasl/cont/assoc/hash_map.h>
 #include <yasl/mem/obj_pool.h>
 #include <yasl/str/view.h>
@@ -41,7 +42,7 @@ class Symbol {
 //     Symbol a = names.intern("foo");
 //     Symbol b = names.intern(String("fo") + "o");
 //     a == b;                          // true, a pointer comparison
-class SymbolTable {
+class SymbolTable : NoneCopyable {
  public:
   explicit SymbolTable(mem::Resource* res = mem::default_resource())
       : pool_(res), set_(res) {}

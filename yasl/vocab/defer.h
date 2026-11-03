@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
 #include <yasl/core/utility.h>
 
 namespace yasl {
@@ -9,7 +10,7 @@ namespace yasl {
 //     ...
 //     g.dismiss();                  // success: skip the rollback
 template <class F>
-class ScopeExit {
+class ScopeExit : MoveOnly {
  public:
   explicit ScopeExit(F f) noexcept(NothrowMoveConstructible<F>)
       : f_(yasl::move(f)) {}

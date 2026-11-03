@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
 #include <yasl/core/check.h>
 #include <yasl/core/exception.h>
 #include <yasl/core/utility.h>
@@ -43,7 +44,7 @@ class Function;
 //
 //     Function<int(int)> f = [p = make_thing()](int x) { return p->apply(x); };
 template <class R, class... Args>
-class Function<R(Args...)> {
+class Function<R(Args...)> : MoveOnly {
   static constexpr size_t kInline = 3 * sizeof(void*);
 
   struct Heap {

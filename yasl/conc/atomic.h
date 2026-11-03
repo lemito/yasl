@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yasl/core/noncopy.h>
 #include <yasl/core/traits.h>
 
 #include <atomic>
@@ -21,7 +22,7 @@ enum class Order : int {
 //     n.fetch_add(1, Order::Relaxed);
 template <class T>
   requires(TriviallyCopyable<T>)
-class Atomic {
+class Atomic : NoneCopyable {
  public:
   constexpr Atomic() noexcept = default;
 
