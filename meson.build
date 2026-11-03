@@ -17,6 +17,7 @@ yasl_sources = files(
   'yasl/conc/thread.cpp',
   'yasl/core/check.cpp',
   'yasl/core/types.cpp',
+  'yasl/core/noncopy.cpp',
   'yasl/io/buffer.cpp',
   'yasl/io/file.cpp',
   'yasl/io/fmt.cpp',

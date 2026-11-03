@@ -4,8 +4,6 @@ VERSION(0.1.0)
 
 NO_UTIL()
 
-ADDINCL(GLOBAL contrib/libs/yasl)
-
 SRCS(
     yasl/conc/futex.cpp
     yasl/conc/mutex.cpp
@@ -13,6 +11,7 @@ SRCS(
     yasl/conc/thread.cpp
     yasl/core/check.cpp
     yasl/core/types.cpp
+    yasl/core/noncopy.cpp
     yasl/io/buffer.cpp
     yasl/io/file.cpp
     yasl/io/fmt.cpp
