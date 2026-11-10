@@ -59,6 +59,7 @@ SRCS(
     yasl/io/fmt_test.cpp
     yasl/io/fs_test.cpp
     yasl/io/io_test.cpp
+    yasl/io/memmap_test.cpp
     yasl/mem/mem_test.cpp
     yasl/mem/arena_test.cpp
     yasl/mem/compose_test.cpp
@@ -80,6 +81,7 @@ SRCS(
     yasl/rand/random_test.cpp
     yasl/str/num_test.cpp
     yasl/str/str_test.cpp
+    yasl/str/mutstr_test.cpp
     yasl/str/string_edge_test.cpp
     yasl/str/symbol_test.cpp
     yasl/time/time_test.cpp

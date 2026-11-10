@@ -23,6 +23,7 @@ yasl_sources = files(
   'yasl/io/fmt.cpp',
   'yasl/io/fs.cpp',
   'yasl/io/input.cpp',
+  'yasl/io/memmap.cpp',
   'yasl/io/output.cpp',
   'yasl/mem/arena.cpp',
   'yasl/mem/obj_pool.cpp',
@@ -36,6 +37,7 @@ yasl_sources = files(
   'yasl/rand/random.cpp',
   'yasl/str/num.cpp',
   'yasl/str/str.cpp',
+  'yasl/str/mutstr.cpp',
   'yasl/time/time.cpp',
 )
 
@@ -168,6 +170,7 @@ if get_option('tests')
   'yasl/io/fmt_test.cpp',
   'yasl/io/fs_test.cpp',
   'yasl/io/io_test.cpp',
+  'yasl/io/memmap_test.cpp',
   'yasl/mem/mem_test.cpp',
   'yasl/mem/arena_test.cpp',
   'yasl/mem/compose_test.cpp',
@@ -188,6 +191,7 @@ if get_option('tests')
   'yasl/rand/random_test.cpp',
   'yasl/str/num_test.cpp',
   'yasl/str/str_test.cpp',
+  'yasl/str/mutstr_test.cpp',
   'yasl/str/string_edge_test.cpp',
   'yasl/str/symbol_test.cpp',
   'yasl/time/time_test.cpp',
@@ -251,4 +255,8 @@ if get_option('bench')
     ),
     dependencies: [yasl_dep] + absl_deps,
   )
+endif
+
+if get_option('string_bench')
+  executable('yasl_string_bench', 'yasl/bench/string_cow/main.cpp', dependencies: yasl_dep)
 endif

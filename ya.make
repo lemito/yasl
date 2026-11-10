@@ -17,6 +17,7 @@ SRCS(
     yasl/io/fmt.cpp
     yasl/io/fs.cpp
     yasl/io/input.cpp
+    yasl/io/memmap.cpp
     yasl/io/output.cpp
     yasl/mem/arena.cpp
     yasl/mem/obj_pool.cpp
@@ -30,6 +31,7 @@ SRCS(
     yasl/rand/random.cpp
     yasl/str/num.cpp
     yasl/str/str.cpp
+    yasl/str/mutstr.cpp
     yasl/time/time.cpp
 )
 

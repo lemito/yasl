@@ -67,6 +67,10 @@ Meson и ya.make перечисляют исходники явно. Тест `y
 Abseil. Чтобы сравнить с google/tcmalloc, соберите бенчмарки с `-DYASL_MALLOC=tcmalloc` и запускайте с
 `GLIBC_TUNABLES=glibc.pthread.rseq=0` (см. раздел «Память»).
 
+Исследование строк SSO/COW: [методика, замеры и выводы](docs/benchmarks/string-cow/README.md).
+Отдельный бенчмарк без Abseil: `-DYASL_BUILD_STRING_BENCH=ON`,
+`./build/yasl_string_bench` (CSV); `--memory` выводит счётчики аллокаций.
+
 ## Структура
 
 | Каталог | Что там |
@@ -130,6 +134,21 @@ String out = b.take();
 
 Для UTF-8 у `StringView` есть `chars()` (итератор по `char32_t`) и `is_valid_utf8()`.
 
+Для изменяемых строк с уникальным владением есть `MutStr`
+(`yasl/str/mutstr.h`): SSO на 15 байт, глубокое копирование,
+mutable-доступ и работа через `mem::Resource` без refcount.
+
+```cpp
+mem::Arena arena;
+MutStr s("hello", &arena);
+s[0] = 'H';
+s += ", world";
+MutStr copy = s;                    // независимое значение, та же arena
+MutStr owned(s, mem::system_resource()); // может пережить arena
+```
+
+[Контракты ресурсов, API и результаты замеров](docs/mutstr.md).
+
 ### Контейнеры
 
 `Vector`, `HashMap`, `BTreeMap`, `TreapMap` и `StringMap` имеют одинаковый набор базовых методов:
@@ -163,6 +182,26 @@ String s = format("{} + {} = {}", 1, 2, 3);
 есть `io::runtime_format(s)`. `io::out()` и `io::err()` можно использовать из нескольких потоков,
 `io::out().lock()` держит блокировку на несколько записей подряд. Файлы: `io::FileOutput`, `io::FileInput`,
 `io::File`; чтение и запись через `Input::read_exact`, `io::copy`, `LimitedInput`, `TeeOutput`.
+
+Файлы можно отображать в память через `yasl/io/memmap.h` (POSIX):
+
+```cpp
+io::MemMap file("data.bin");       // весь файл, только чтение
+StringView text = file.view();               // без копирования, не обязан иметь NUL
+// Диапазон: offset=3, length=4096; offset может быть не выровнен на страницу.
+auto region = io::MemMap::map(fd, io::MemMapMode::ReadWrite, 3, 4096);
+region.mut_bytes()[0] = 'X';
+region.flush();                             // синхронный msync, ошибки видны вызывающему
+```
+
+`MemMap` владеет отображением, перемещается и снимает его в деструкторе.
+Переданный `fd` можно закрыть сразу после `map`. Режим `CopyOnWrite` разрешает
+изменения без записи в файл. Пустые диапазоны дают `size() == 0` и `data() == nullptr`;
+по умолчанию длина — до конца файла. Диапазоны за EOF отклоняются, файл не растёт.
+Указатели и представления действуют до закрытия/уничтожения отображения или замены
+через move-присваивание. Файл нельзя укорачивать во время использования: доступ
+за новым EOF может вызвать SIGBUS. Деструктор только снимает отображение;
+для контроля ошибок записи вызывайте `flush()` явно.
 
 Числовые обёртки из `yasl/io/fmt.h`: `fmt::num`, `fmt::hex`, `fmt::oct`, `fmt::bin`, `fmt::fixed`,
 `fmt::sci`, `fmt::pad`, `fmt::grouped`, `fmt::bytes`, `fmt::percent`.
