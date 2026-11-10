@@ -148,3 +148,9 @@ cc_binary(
         "@abseil-cpp//absl/strings:str_format",
     ],
 )
+
+cc_binary(
+    name = "yasl_string_bench",
+    srcs = ["yasl/bench/string_cow/main.cpp"],
+    deps = [":yasl", ":bench_harness"],
+)

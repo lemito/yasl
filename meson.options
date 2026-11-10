@@ -6,3 +6,5 @@ option('tcmalloc_lib', type: 'string', value: '',
   description: 'google/tcmalloc archive for malloc=tcmalloc (default: third_party/tcmalloc_build/lib/libtcmalloc_google.a)')
 option('tests', type: 'boolean', value: true, description: 'Build the tests')
 option('bench', type: 'boolean', value: false, description: 'Build the benchmarks (needs Abseil)')
+
+option('string_bench', type: 'boolean', value: false, description: 'Build standalone COW/SSO string experiment')

@@ -6,6 +6,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(YASL_BUILD_TESTS "Build yasl tests" ${PROJECT_IS_TOP_LEVEL})
 option(YASL_BUILD_BENCH "Build the benchmarks (yasl/bench)" OFF)
+option(YASL_BUILD_STRING_BENCH "Build standalone COW/SSO string experiment" OFF)
 option(YASL_SANITIZE "Build with AddressSanitizer + UBSan" OFF)
 
 set(YASL_MALLOC "libc" CACHE STRING "System allocator behind yasl::mem: libc, tcmalloc or custom")
@@ -119,4 +120,9 @@ if(YASL_BUILD_BENCH)
     target_link_libraries(yasl_bench PRIVATE yasl
         absl::flat_hash_map absl::btree absl::inlined_vector
         absl::hash absl::str_format absl::strings)
+endif()
+
+if(YASL_BUILD_STRING_BENCH)
+    add_executable(yasl_string_bench yasl/bench/string_cow/main.cpp)
+    target_link_libraries(yasl_string_bench PRIVATE yasl)
 endif()
