@@ -135,7 +135,8 @@ inline EmptyBlock kEmptyBlock = make_empty_block();
 template <class T, class KeyOf = Identity, class Hasher = HashAny,
           class Eq = EqualTo>
 class HashTable {
-  static_assert(NothrowMoveConstructible<T>);
+  // const map keys may need a throwing deep copy when an entry moves.
+  static_assert(NothrowMoveConstructible<T> || CopyConstructible<T>);
 
   static constexpr size_t kNpos = ~size_t(0);
 
@@ -340,7 +341,14 @@ class HashTable {
     // (and args may refer to elements that a rehash would move).
     T tmp(yasl::forward<Args>(args)...);
     size_t i = prepare_insert(h);
-    yasl::construct_at(slot(i), yasl::move(tmp));
+    if constexpr (NothrowMoveConstructible<T>) {
+      yasl::construct_at(slot(i), yasl::move(tmp));
+    } else {
+      yasl::construct_at(slot(i), static_cast<const T&>(tmp));
+    }
+    // Publish only after construction succeeds: no phantom element on failure.
+    if (ctrl_[i] == detail::kEmpty) --hdr().growth_left;
+    set_ctrl(i, uint8(h >> 57));
     ++hdr().size;
     return {iterator(this, i), true};
   }
@@ -521,8 +529,7 @@ class HashTable {
     }
   }
 
-  // Picks (and marks as full) the slot for a new element with hash h, growing
-  // if needed.
+  // Picks an uncommitted slot for a new element, growing if needed.
   size_t prepare_insert(uint64 h) {
     if (hdr().cap == 0) {
       rehash(detail::kGroup);
@@ -534,10 +541,6 @@ class HashTable {
                                                             : hdr().cap);
       i = find_free(h);
     }
-    if (ctrl_[i] == detail::kEmpty) {
-      --hdr().growth_left;
-    }
-    set_ctrl(i, uint8(h >> 57));
     return i;
   }
 
@@ -620,14 +623,23 @@ class HashTable {
     for (size_t i = next_full(0); i < hdr().cap; i = next_full(i + 1)) {
       uint64 h = hash_of(key_of(*slot(i)));
       size_t j = fresh.find_free(h);
+      if constexpr (NothrowMoveConstructible<T>) {
+        fresh.move_into(j, slot(i));
+      } else {
+        // Until every copy succeeds the source table stays intact. The fresh
+        // table tracks each constructed slot so its destructor rolls back.
+        yasl::construct_at(fresh.slot(j), static_cast<const T&>(*slot(i)));
+      }
       fresh.set_ctrl(j, uint8(h >> 57));
-      fresh.move_into(j, slot(i));
+      ++fresh.hdr().size;
+      --fresh.hdr().growth_left;
     }
-    fresh.hdr().size = hdr().size;
-    fresh.hdr().growth_left = detail::max_items(new_cap) - hdr().size;
     swap(fresh);
-    // `fresh` now holds the old block whose elements were moved out.
-    fresh.free_table();
+    if constexpr (NothrowMoveConstructible<T>) {
+      // The old elements have already been destroyed by move_into().
+      fresh.free_table();
+    }
+    // In the copy path fresh destroys all old entries, then frees their block.
   }
 
   void move_into(size_t j, T* src) noexcept {
