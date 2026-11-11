@@ -13,6 +13,7 @@ int main(int argc, char** argv) {
   }
 
   bench::Bencher b(filter, csv);
+  bench::abi_report();
   if (csv) {
     printf("\"group\",\"name\",\"ns_per_op\"\n");
   }

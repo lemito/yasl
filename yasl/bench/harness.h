@@ -80,6 +80,7 @@ class Bencher {
 void alloc_benches(Bencher& b);
 void cont_benches(Bencher& b);
 void str_benches(Bencher& b);
+void abi_report();
 
 inline std::vector<uint64> make_keys(size_t n, uint64 seed = 1) {
   yasl::Random rng(seed);
