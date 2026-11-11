@@ -4,6 +4,7 @@ endif()
 
 set(HEADERS
     yasl/core/math_raw.h
+    yasl/str/builder_core.h
     yasl/time/time.h
     yasl/os/env.h
 )

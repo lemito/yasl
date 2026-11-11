@@ -2,6 +2,7 @@
 
 #include <yasl/io/output.h>
 
+#include "builder_core.h"
 #include "str.h"
 
 namespace yasl {
