@@ -8,6 +8,9 @@ project(
 
 cxx = meson.get_compiler('cpp')
 is_windows = host_machine.system() == 'windows'
+if is_windows
+  error('yasl currently supports Linux and macOS only; Windows sources are experimental and are not a supported build')
+endif
 malloc = get_option('malloc')
 
 yasl_sources = files(

@@ -7,7 +7,11 @@ Yet Another Standard Library для C++20. Контейнеры, строки, �
 Это проверяет тест `yasl_include_policy` (`cmake/check_includes.cmake`). Код для работы вместе со std
 лежит отдельно в `yasl/compat/`.
 
-Платформа: Linux проверяется локально и в CI. Ветки для macOS и Windows написаны, но Windows ни разу не собиралась.
+Поддерживаемые и проверяемые платформы: Linux и macOS (CMake, Bazel и Meson в CI).
+Windows backend присутствует как экспериментальный код, но Windows не является поддерживаемой
+платформой: CMake и Meson отклоняют такую конфигурацию до сборки. `yasl/os/fd.h`,
+`yasl/io/memmap.h` и автоматическое получение `env::args()` имеют платформенные ограничения;
+для переносимого кода передавайте аргументы через `env::init(argc, argv)`.
 
 ## Сборка
 
