@@ -79,6 +79,25 @@ jobs:
         run: cmake --build build -j
       - name: Test
         run: cd build && ctest --output-on-failure
+      - name: Install and use from an external project
+        run: |
+          cmake --install build --prefix "$RUNNER_TEMP/yasl"
+          mkdir consumer && cd consumer
+          cat > CMakeLists.txt <<'EOF'
+          cmake_minimum_required(VERSION 3.20)
+          project(yasl_macos_consumer LANGUAGES CXX)
+          find_package(yasl REQUIRED)
+          add_executable(app main.cpp)
+          target_link_libraries(app PRIVATE yasl::yasl)
+          EOF
+          cat > main.cpp <<'EOF'
+          #include <yasl/io/output.h>
+          #include <yasl/time/time.h>
+          int main() { yasl::io::println("macOS {}", yasl::Duration::secs(1)); }
+          EOF
+          cmake -S . -B b -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/yasl"
+          cmake --build b
+          ./b/app
 
   hash-swar:
     runs-on: ubuntu-latest
