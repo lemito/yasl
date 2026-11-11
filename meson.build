@@ -253,6 +253,7 @@ if get_option('bench')
     'yasl_bench',
     files(
   'yasl/bench/alloc_bench.cpp',
+  'yasl/bench/abi_report.cpp',
   'yasl/bench/bench.cpp',
   'yasl/bench/cont_bench.cpp',
   'yasl/bench/str_bench.cpp',
