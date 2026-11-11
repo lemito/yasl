@@ -156,22 +156,21 @@ class ThreadPool {
     if (workers == 0) {
       workers = 1;
     }
-    for (size_t i = 0; i < workers; ++i) {
-      threads_.push_back(Thread([this] { run(); }, res));
+    threads_.reserve(workers);
+    try {
+      for (size_t i = 0; i < workers; ++i) {
+        threads_.push_back(Thread([this] { run(); }, res));
+      }
+    } catch (...) {
+      close();
+      throw;
     }
   }
 
   ThreadPool(const ThreadPool&) = delete;
   ThreadPool& operator=(const ThreadPool&) = delete;
 
-  ~ThreadPool() {
-    {
-      auto g = queue_.lock();
-      g->closing = true;
-    }
-    cv_.notify_all();
-    threads_.clear();  // joins
-  }
+  ~ThreadPool() { close(); }
 
   size_t workers() const noexcept { return threads_.size(); }
 
@@ -207,6 +206,15 @@ class ThreadPool {
   }
 
  private:
+  void close() noexcept {
+    {
+      auto g = queue_.lock();
+      g->closing = true;
+    }
+    cv_.notify_all();
+    threads_.clear();
+  }
+
   struct Queue {
     Deque<Function<void()>> tasks;
     bool closing;

@@ -57,27 +57,34 @@ class Result {
     yasl::construct_at(yasl::addressof(error_), yasl::move(e.error));
   }
 
-  Result(const Result& other) { copy_from(other); }
+  Result(const Result& other) requires(CopyConstructible<T> && CopyConstructible<E>) { copy_from(other); }
 
   Result(Result&& other) noexcept(NothrowMoveConstructible<T> &&
-                                  NothrowMoveConstructible<E>) {
+                                  NothrowMoveConstructible<E>)
+    requires(MoveConstructible<T> && MoveConstructible<E>) {
     move_from(yasl::move(other));
   }
 
-  Result& operator=(const Result& other) {
-    if (this != &other) {
-      destroy();
-      copy_from(other);
-    }
+  Result& operator=(const Result& other)
+    requires(CopyConstructible<T> && CopyConstructible<E> &&
+             (AssignableFrom<T&, const T&> || NothrowMoveConstructible<T>) &&
+             (AssignableFrom<E&, const E&> || NothrowMoveConstructible<E>) &&
+             (NothrowMoveConstructible<T> || NothrowMoveConstructible<E>))
+  {
+    if (this != &other) assign_from(other);
     return *this;
   }
 
-  Result& operator=(Result&& other) noexcept(NothrowMoveConstructible<T> &&
-                                             NothrowMoveConstructible<E>) {
-    if (this != &other) {
-      destroy();
-      move_from(yasl::move(other));
-    }
+  Result& operator=(Result&& other) noexcept(
+      NothrowMoveConstructible<T> && NothrowMoveConstructible<E> &&
+      (!AssignableFrom<T&, T&&> || NothrowMoveAssignable<T>) &&
+      (!AssignableFrom<E&, E&&> || NothrowMoveAssignable<E>))
+    requires(MoveConstructible<T> && MoveConstructible<E> &&
+             (AssignableFrom<T&, T&&> || NothrowMoveConstructible<T>) &&
+             (AssignableFrom<E&, E&&> || NothrowMoveConstructible<E>) &&
+             (NothrowMoveConstructible<T> || NothrowMoveConstructible<E>))
+  {
+    if (this != &other) assign_from(yasl::move(other));
     return *this;
   }
 
@@ -200,6 +207,52 @@ class Result {
   }
 
  private:
+  // Replace a live union member, restoring it if construction throws.
+  template <class New, class Old, class U>
+  static void replace(New* dst, Old* old, U&& value) {
+    if constexpr (__is_nothrow_constructible(New, U&&)) {
+      yasl::destroy_at(old);
+      yasl::construct_at(dst, yasl::forward<U>(value));
+    } else if constexpr (NothrowMoveConstructible<New>) {
+      New tmp(yasl::forward<U>(value));
+      yasl::destroy_at(old);
+      yasl::construct_at(dst, yasl::move(tmp));
+    } else {
+      static_assert(NothrowMoveConstructible<Old>);
+      Old backup(yasl::move(*old));
+      yasl::destroy_at(old);
+      try {
+        yasl::construct_at(dst, yasl::forward<U>(value));
+      } catch (...) {
+        yasl::construct_at(old, yasl::move(backup));
+        throw;
+      }
+    }
+  }
+
+  template <class R>
+  void assign_from(R&& other) {
+    if (ok_ && other.ok_) {
+      if constexpr (AssignableFrom<T&, decltype((yasl::forward<R>(other).value_))>) {
+        value_ = yasl::forward<R>(other).value_;
+      } else {
+        replace(&value_, &value_, yasl::forward<R>(other).value_);
+      }
+    } else if (!ok_ && !other.ok_) {
+      if constexpr (AssignableFrom<E&, decltype((yasl::forward<R>(other).error_))>) {
+        error_ = yasl::forward<R>(other).error_;
+      } else {
+        replace(&error_, &error_, yasl::forward<R>(other).error_);
+      }
+    } else if (other.ok_) {
+      replace(&value_, &error_, yasl::forward<R>(other).value_);
+      ok_ = true;
+    } else {
+      replace(&error_, &value_, yasl::forward<R>(other).error_);
+      ok_ = false;
+    }
+  }
+
   void destroy() noexcept {
     if (ok_) {
       yasl::destroy_at(yasl::addressof(value_));

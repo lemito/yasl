@@ -116,19 +116,26 @@ class Deque {
 
   Deque(std::initializer_list<T> il,
         mem::Resource* res = mem::default_resource())
-      : res_(res) {
+      : Deque(res) {
     reserve(il.size());
     for (const T& v : il) {
       push_back(v);
     }
   }
 
-  Deque(const Deque& other) : Deque(other, other.res_) {}
+  Deque(const Deque& other) requires CopyConstructible<T> : Deque(other, other.res_) {}
 
-  Deque(const Deque& other, mem::Resource* res) : res_(res) {
+  Deque(const Deque& other, mem::Resource* res)
+    requires CopyConstructible<T> : Deque(res) {
     reserve(other.size_);
-    for (size_t i = 0; i < other.size_; ++i) {
-      emplace_back(other[i]);
+    try {
+      for (size_t i = 0; i < other.size_; ++i) {
+        emplace_back(other[i]);
+      }
+    } catch (...) {
+      clear();
+      free_buffer();
+      throw;
     }
   }
 
@@ -144,7 +151,7 @@ class Deque {
     free_buffer();
   }
 
-  Deque& operator=(const Deque& other) {
+  Deque& operator=(const Deque& other) requires CopyConstructible<T> {
     if (this != &other) {
       Deque tmp(other, res_);
       swap(tmp);
@@ -331,7 +338,7 @@ class Deque {
 
   // Removes the element at `at`, moving the shorter side. Returns the position
   // of the next one.
-  size_t erase_at(size_t at) noexcept {
+  size_t erase_at(size_t at) noexcept(NothrowMoveAssignable<T>) {
     YASL_ASSERT(at < size_);
     if (at < size_ / 2) {
       for (size_t i = at; i > 0; --i) {
@@ -347,7 +354,7 @@ class Deque {
     return at;
   }
 
-  iterator erase(const_iterator pos) noexcept {
+  iterator erase(const_iterator pos) noexcept(NothrowMoveAssignable<T>) {
     return {this, erase_at(pos.i_)};
   }
 

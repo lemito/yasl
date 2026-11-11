@@ -20,7 +20,11 @@ void register_test(const char* name, Fn fn) {
 }
 
 void fail(const char* file, int line, StringView message) {
-  throw Failure{format("{}:{}: {}", file, line, message)};
+  // Failure objects outlive the test body.  Copy diagnostics to the process
+  // resource so a scoped test resource cannot dangle before the catch block.
+  StringBuilder b(mem::system_resource());
+  b.format("{}:{}: {}", file, line, message);
+  throw Failure{b.take()};
 }
 
 // Usage: yasl_tests [substring-filter]

@@ -9,6 +9,25 @@
 
 using namespace yasl;
 
+namespace {
+struct ThrowingCopy {
+  static int copies_before_throw;
+  int value = 0;
+
+  explicit ThrowingCopy(int v = 0) : value(v) {}
+  ThrowingCopy(const ThrowingCopy& other) : value(other.value) {
+    if (copies_before_throw-- == 0) {
+      throw BadAlloc();
+    }
+  }
+  ThrowingCopy(ThrowingCopy&&) noexcept = default;
+  ThrowingCopy& operator=(const ThrowingCopy&) = default;
+  ThrowingCopy& operator=(ThrowingCopy&&) noexcept = default;
+};
+
+int ThrowingCopy::copies_before_throw = 0;
+}  // namespace
+
 YASL_TEST(deque_edge_empty_operations) {
   Deque<int> d;
   CHECK(d.empty());
@@ -184,6 +203,19 @@ YASL_TEST(deque_edge_no_leak_after_clear) {
     CHECK(d.empty());
   }
   CHECK_EQ(t.stats().live(), size_t(0));
+}
+
+YASL_TEST(deque_copy_constructor_is_transactional) {
+  mem::Tracking t;
+  Deque<ThrowingCopy> source(&t);
+  for (int i = 0; i < 8; ++i) {
+    source.emplace_back(i);
+  }
+  const size_t live_before = t.stats().live();
+  ThrowingCopy::copies_before_throw = 3;
+  CHECK_THROWS((Deque<ThrowingCopy>(source, &t)), BadAlloc);
+  CHECK_EQ(t.stats().live(), live_before);
+  CHECK_EQ(source.size(), size_t(8));
 }
 
 YASL_TEST(deque_vs_std_deque_stress) {
