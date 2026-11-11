@@ -5,12 +5,14 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 filter=""
 out="$root/bench-results"
 jobs="$(nproc)"
+baseline=""
 
-while getopts "f:o:j:" opt; do
+while getopts "f:o:j:b:" opt; do
   case "$opt" in
     f) filter="$OPTARG" ;;
     o) out="$OPTARG" ;;
     j) jobs="$OPTARG" ;;
+    b) baseline="$OPTARG" ;;
     *) echo "usage: $0 [-f filter] [-o out_dir] [-j jobs]" >&2; exit 2 ;;
   esac
 done
@@ -113,5 +115,9 @@ if errors:
     sys.exit(1)
 print(f"CHECK OK: {len(present)} variant(s), {len(order)} benchmarks, results in {out}")
 PY
+
+if [ -n "$baseline" ]; then
+  python3 -I "$root/yasl/bench/check_regressions.py" "$baseline" "$out/${variants[0]}.csv" || failed=1
+fi
 
 exit "$failed"

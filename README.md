@@ -76,6 +76,12 @@ Abseil. Чтобы сравнить с google/tcmalloc, соберите бен�
 Отдельный бенчмарк без Abseil: `-DYASL_BUILD_STRING_BENCH=ON`,
 `./build/yasl_string_bench` (CSV); `--memory` выводит счётчики аллокаций.
 
+Воспроизводимый прогон всех вариантов аллокатора: `yasl/bench/run_all.sh -o bench-results`.
+Скрипт проверяет формат и полноту CSV и создаёт `summary.md`. Для регрессионного гейта
+передайте baseline: `yasl/bench/run_all.sh -b baseline.csv`; по умолчанию допускается
+не более 20% замедления на каждом измерении, порог можно задать третьим аргументом
+`yasl/bench/check_regressions.py baseline.csv current.csv 1.10`.
+
 ## Структура
 
 | Каталог | Что там |
