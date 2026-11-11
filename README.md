@@ -29,6 +29,7 @@ cd build && ctest
 | `YASL_BUILD_TESTS` | `ON` для корневого проекта | собирает `yasl_tests` |
 | `YASL_BUILD_BENCH` | `OFF` | собирает `yasl_bench` (собирайте в Release); нужен Abseil (`find_package(absl)`) |
 | `YASL_SANITIZE` | `OFF` | ASan и UBSan |
+| `YASL_SANITIZER` | `none` | отдельный режим: `asan_ubsan`, `tsan` или `lsan` |
 | `YASL_MALLOC` | `libc` | системный аллокатор: `libc`, `tcmalloc` или `custom` |
 | `YASL_DEFAULT_ALLOC` | `sys` | ресурс по умолчанию: `sys` или `chain` |
 
