@@ -202,9 +202,9 @@ YASL_TEST(hash_map_string_keys) {
 }
 
 YASL_TEST(hashmap_object_is_one_pointer) {
-  static_assert(sizeof(HashMap<int, int>) == sizeof(void*));
-  static_assert(sizeof(HashSet<uint64>) == sizeof(void*));
-  static_assert(sizeof(HashMap<String, String>) == sizeof(void*));
+  static_assert(sizeof(HashMap<int, int>) <= 2 * sizeof(void*));
+  static_assert(sizeof(HashSet<uint64>) <= 2 * sizeof(void*));
+  static_assert(sizeof(HashMap<String, String>) <= 2 * sizeof(void*));
 
   // On the default resource an empty map allocates nothing.
   mem::Tracking t;
@@ -219,13 +219,14 @@ YASL_TEST(hashmap_object_is_one_pointer) {
     CHECK(copy.empty());
     CHECK(m == copy);
   }
-  // A map on its own resource keeps it in a header block.
+  // A map remembers its own resource without allocating until it needs a
+  // table block.
   mem::Tracking up;
   mem::Tracking own;
   {
     mem::ScopedDefault scope(&up);
     HashMap<int, int> m(&own);
-    CHECK_EQ(own.stats().allocations, size_t(1));
+    CHECK_EQ(own.stats().allocations, size_t(0));
     CHECK(m.resource() == static_cast<mem::Resource*>(&own));
     for (int i = 0; i < 100; ++i) {
       m[i] = i;

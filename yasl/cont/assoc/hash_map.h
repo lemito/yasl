@@ -4,6 +4,7 @@
 #include <yasl/core/hash.h>
 #include <yasl/core/utility.h>
 #include <yasl/mem/resource.h>
+#include <yasl/cont/seq/vector.h>
 #include <yasl/rand/random.h>
 
 #include <initializer_list>  // language support for braced lists
@@ -20,7 +21,7 @@
 #include <emmintrin.h>
 #endif
 
-#include "map.h"
+#include "map_ops.h"
 
 namespace yasl {
 namespace detail {
@@ -121,8 +122,8 @@ inline EmptyBlock kEmptyBlock = make_empty_block();
 // byte per slot (7 bits of the hash or empty/deleted) probed a group at a
 // time (16 with SSE2, otherwise 8 with 64-bit arithmetic), triangular probing,
 // 7/8 maximum load. Slots, bookkeeping and control bytes share one allocation,
-// and the object is a single pointer (an empty table points to a static block
-// and allocates nothing).
+// and the object retains its resource even without a block. An empty table
+// points to a static block and allocates nothing.
 //
 // Iterators, pointers and references are invalidated by any insertion that
 // rehashes; erasing never moves other elements. Iteration order is unspecified.
@@ -191,17 +192,14 @@ class HashTable {
   using iterator =
       Conditional<SameAs<KeyOf, Identity>, Iter<true>, Iter<false>>;
 
-  HashTable() noexcept : ctrl_(empty_ctrl()) {}
+  HashTable() noexcept(__is_nothrow_constructible(Hasher) &&
+                       __is_nothrow_constructible(Eq))
+      : ctrl_(empty_ctrl()), res_(mem::default_resource()) {}
 
-  // A table on a non-default resource keeps the resource in a block of its own
-  // (so the constructor may throw); on the default resource it allocates
-  // nothing.
+  // Even an empty table remembers the resource selected at construction.
   explicit HashTable(mem::Resource* res, Hasher hash = Hasher(), Eq eq = Eq())
-      : ctrl_(empty_ctrl()), hash_(yasl::move(hash)), eq_(yasl::move(eq)) {
-    if (res != mem::default_resource()) {
-      ctrl_ = allocate_block(0, res);
-    }
-  }
+      : hash_(yasl::move(hash)), eq_(yasl::move(eq)),
+        ctrl_(empty_ctrl()), res_(res) {}
 
   HashTable(std::initializer_list<T> il,
             mem::Resource* res = mem::default_resource())
@@ -212,9 +210,11 @@ class HashTable {
     }
   }
 
-  HashTable(const HashTable& other) : HashTable(other, other.resource()) {}
+  HashTable(const HashTable& other)
+    requires(CopyConstructible<T> && CopyConstructible<Hasher> && CopyConstructible<Eq>) : HashTable(other, other.resource()) {}
 
   HashTable(const HashTable& other, mem::Resource* res)
+    requires(CopyConstructible<T> && CopyConstructible<Hasher> && CopyConstructible<Eq>)
       : HashTable(res, other.hash_, other.eq_) {
     const size_t other_cap = other.hdr().cap;
     if (other.hdr().size == 0) {
@@ -245,18 +245,21 @@ class HashTable {
     hdr().growth_left = other.hdr().growth_left;
   }
 
-  // The moved-from table is empty and on the default resource.
-  HashTable(HashTable&& other) noexcept
-      : ctrl_(yasl::exchange(other.ctrl_, empty_ctrl())),
-        hash_(yasl::move(other.hash_)),
-        eq_(yasl::move(other.eq_)) {}
+  // Policies are constructed before ownership is transferred.
+  HashTable(HashTable&& other) noexcept(NothrowMoveConstructible<Hasher> &&
+                                       NothrowMoveConstructible<Eq>)
+      : hash_(yasl::move(other.hash_)), eq_(yasl::move(other.eq_)),
+        ctrl_(yasl::exchange(other.ctrl_, empty_ctrl())), res_(other.res_) {
+    other.res_ = mem::default_resource();
+  }
 
   ~HashTable() {
     destroy_all();
     free_table();
   }
 
-  HashTable& operator=(const HashTable& other) {
+  HashTable& operator=(const HashTable& other)
+    requires(CopyConstructible<T> && CopyConstructible<Hasher> && CopyConstructible<Eq>) {
     if (this != &other) {
       HashTable tmp(other, resource());
       swap(tmp);
@@ -264,13 +267,12 @@ class HashTable {
     return *this;
   }
 
-  HashTable& operator=(HashTable&& other) noexcept {
+  HashTable& operator=(HashTable&& other) noexcept(
+      NothrowMoveConstructible<Hasher> && NothrowMoveConstructible<Eq> &&
+      NothrowMoveAssignable<Hasher> && NothrowMoveAssignable<Eq>) {
     if (this != &other) {
-      destroy_all();
-      free_table();
-      ctrl_ = yasl::exchange(other.ctrl_, empty_ctrl());
-      hash_ = yasl::move(other.hash_);
-      eq_ = yasl::move(other.eq_);
+      HashTable tmp(yasl::move(other));
+      swap(tmp);
     }
     return *this;
   }
@@ -280,7 +282,7 @@ class HashTable {
   bool empty() const noexcept { return hdr().size == 0; }
 
   mem::Resource* resource() const noexcept {
-    return hdr().res ? hdr().res : mem::default_resource();
+    return res_;
   }
 
   // Number of slots (a power of two, or 0 before the first insertion).
@@ -299,19 +301,19 @@ class HashTable {
   const_iterator end() const noexcept { return {this, hdr().cap}; }
 
   template <class Q>
-  iterator find(const Q& key) noexcept {
+  iterator find(const Q& key) {
     size_t i = find_index(key, hash_of(key));
     return {this, i == kNpos ? hdr().cap : i};
   }
 
   template <class Q>
-  const_iterator find(const Q& key) const noexcept {
+  const_iterator find(const Q& key) const {
     size_t i = find_index(key, hash_of(key));
     return {this, i == kNpos ? hdr().cap : i};
   }
 
   template <class Q>
-  bool contains(const Q& key) const noexcept {
+  bool contains(const Q& key) const {
     return find_index(key, hash_of(key)) != kNpos;
   }
 
@@ -399,10 +401,13 @@ class HashTable {
     }
   }
 
-  void swap(HashTable& other) noexcept {
-    yasl::swap(ctrl_, other.ctrl_);
+  void swap(HashTable& other) noexcept(
+      NothrowMoveConstructible<Hasher> && NothrowMoveAssignable<Hasher> &&
+      NothrowMoveConstructible<Eq> && NothrowMoveAssignable<Eq>) {
     yasl::swap(hash_, other.hash_);
     yasl::swap(eq_, other.eq_);
+    yasl::swap(ctrl_, other.ctrl_);
+    yasl::swap(res_, other.res_);
   }
 
   // Same elements, regardless of order.
@@ -422,7 +427,7 @@ class HashTable {
   }
 
   // Checks every structural invariant. Meant for tests and debugging.
-  bool validate() const noexcept {
+  bool validate() const {
     if (hdr().cap == 0) {
       return hdr().size == 0;
     }
@@ -464,7 +469,7 @@ class HashTable {
   }
 
   template <class Q>
-  uint64 hash_of(const Q& key) const noexcept {
+  uint64 hash_of(const Q& key) const {
     uint64 seed = uint64(reinterpret_cast<uintptr_t>(&detail::kSeedAnchor));
     return yasl::detail::mum(uint64(hash_(key)) ^ seed, 0x9E3779B97F4A7C15ull);
   }
@@ -490,7 +495,7 @@ class HashTable {
   }
 
   template <class Q>
-  size_t find_index(const Q& key, uint64 h) const noexcept {
+  size_t find_index(const Q& key, uint64 h) const {
     if (hdr().cap == 0) {
       return kNpos;
     }
@@ -618,10 +623,17 @@ class HashTable {
   }
 
   void rehash(size_t new_cap) {
-    HashTable fresh(hash_, eq_);
+    HashTable fresh(resource(), hash_, eq_);
     fresh.ctrl_ = allocate_block(new_cap, resource());
+    // Finish all potentially throwing hashing before moving any source entry.
+    Vector<uint64> hashes(resource());
+    hashes.reserve(size());
     for (size_t i = next_full(0); i < hdr().cap; i = next_full(i + 1)) {
-      uint64 h = hash_of(key_of(*slot(i)));
+      hashes.push_back(hash_of(key_of(*slot(i))));
+    }
+    size_t hash_index = 0;
+    for (size_t i = next_full(0); i < hdr().cap; i = next_full(i + 1)) {
+      uint64 h = hashes[hash_index++];
       size_t j = fresh.find_free(h);
       if constexpr (NothrowMoveConstructible<T>) {
         fresh.move_into(j, slot(i));
@@ -634,7 +646,7 @@ class HashTable {
       ++fresh.hdr().size;
       --fresh.hdr().growth_left;
     }
-    swap(fresh);
+    yasl::swap(ctrl_, fresh.ctrl_);
     if constexpr (NothrowMoveConstructible<T>) {
       // The old elements have already been destroyed by move_into().
       fresh.free_table();
@@ -647,12 +659,11 @@ class HashTable {
     yasl::destroy_at(src);
   }
 
-  HashTable(Hasher hash, Eq eq) noexcept
-      : ctrl_(empty_ctrl()), hash_(yasl::move(hash)), eq_(yasl::move(eq)) {}
-
-  uint8* ctrl_;
   [[no_unique_address]] Hasher hash_;
   [[no_unique_address]] Eq eq_;
+  uint8* ctrl_;
+  mem::Resource* res_;
+
 };
 
 // Unordered map. Faster than the ordered maps for point lookups; no ordering,
