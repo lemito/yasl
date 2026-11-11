@@ -2,11 +2,8 @@
 
 #include <stdlib.h>
 #include <yasl/cont/seq/vector.h>
-#include <yasl/io/file.h>
 
-#if defined(__APPLE__)
-#include <crt_externs.h>
-#endif
+#include "env_platform.h"
 
 namespace yasl::env {
 namespace {
@@ -52,25 +49,7 @@ void init(int argc, const char* const* argv) {
 
 Span<const String> args() {
   if (!g_ready) {
-    Vector<String>& out = storage();
-#if defined(__APPLE__)
-    int argc = *::_NSGetArgc();
-    char** argv = *::_NSGetArgv();
-    for (int i = 0; i < argc; ++i) {
-      out.push_back(String(argv[i], mem::system_resource()));
-    }
-#else
-    try {
-      String raw = io::read_file("/proc/self/cmdline");
-      for (StringView part : raw.view().split('\0')) {
-        out.push_back(String(part, mem::system_resource()));
-      }
-      if (!out.empty() && out.back().empty()) {
-        out.pop_back();  // the data ends with a NUL
-      }
-    } catch (const Exception&) {
-    }
-#endif
+    detail::append_process_args(storage());
     g_ready = true;
   }
   return Span<const String>(storage());

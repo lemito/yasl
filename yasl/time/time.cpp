@@ -2,6 +2,8 @@
 
 #include <time.h>
 
+#include <yasl/io/output.h>
+
 namespace yasl {
 namespace {
 int64 read_clock(clockid_t id) noexcept {

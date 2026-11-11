@@ -32,6 +32,7 @@ yasl_sources = files(
   'yasl/mem/resource.cpp',
   'yasl/mem/thread_local_pool.cpp',
   'yasl/os/env.cpp',
+  'yasl/os/env_platform.cpp',
   'yasl/os/fd.cpp',
   'yasl/ptr/shared.cpp',
   'yasl/rand/random.cpp',

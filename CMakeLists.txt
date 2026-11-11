@@ -108,6 +108,11 @@ if(YASL_BUILD_TESTS)
         COMMAND ${CMAKE_COMMAND} -DROOT=${CMAKE_CURRENT_SOURCE_DIR} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_includes.cmake)
     add_test(NAME yasl_build_lists
         COMMAND ${CMAKE_COMMAND} -DROOT=${CMAKE_CURRENT_SOURCE_DIR} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_build_lists.cmake)
+    add_test(NAME yasl_layer_boundaries
+        COMMAND ${CMAKE_COMMAND} -DROOT=${CMAKE_CURRENT_SOURCE_DIR} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_layer_boundaries.cmake)
+    add_test(NAME yasl_public_headers
+        COMMAND ${CMAKE_COMMAND} -DROOT=${CMAKE_CURRENT_SOURCE_DIR} -DCXX=${CMAKE_CXX_COMPILER}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_public_headers.cmake)
     add_test(NAME yasl_format_compile_fail
         COMMAND ${CMAKE_COMMAND} -DCXX=${CMAKE_CXX_COMPILER} -DROOT=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_compile_fail.cmake)

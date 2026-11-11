@@ -1,7 +1,12 @@
 #pragma once
 
+#include <compare>
 #include <yasl/core/utility.h>
-#include <yasl/io/output.h>
+#include <yasl/core/types.h>
+
+namespace yasl::io {
+class Output;
+}
 
 namespace yasl {
 // A span of time in nanoseconds (int64: about +-292 years), like Go's
@@ -9,7 +14,7 @@ namespace yasl {
 //
 //     using namespace yasl::literals;
 //     Duration timeout = 250_ms + 2_s;
-//     io::println("{}", timeout);   // 2.25s
+//     io::println("{}", timeout);   // 2.25s (include <yasl/io/output.h>)
 class Duration {
  public:
   constexpr Duration() noexcept = default;

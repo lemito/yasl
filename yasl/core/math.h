@@ -2,6 +2,7 @@
 
 #include <yasl/vocab/optional.h>
 
+#include "math_raw.h"
 #include "bits.h"
 #include "utility.h"
 
@@ -13,7 +14,7 @@ template <Integral T>
   requires(!SameAs<RemoveCV<T>, bool>)
 constexpr Optional<T> checked_add(T a, T b) noexcept {
   T r;
-  if (__builtin_add_overflow(a, b, &r)) {
+  if (!math::checked_add(a, b, r)) {
     return none;
   }
   return r;
@@ -23,7 +24,7 @@ template <Integral T>
   requires(!SameAs<RemoveCV<T>, bool>)
 constexpr Optional<T> checked_sub(T a, T b) noexcept {
   T r;
-  if (__builtin_sub_overflow(a, b, &r)) {
+  if (!math::checked_sub(a, b, r)) {
     return none;
   }
   return r;
@@ -33,7 +34,7 @@ template <Integral T>
   requires(!SameAs<RemoveCV<T>, bool>)
 constexpr Optional<T> checked_mul(T a, T b) noexcept {
   T r;
-  if (__builtin_mul_overflow(a, b, &r)) {
+  if (!math::checked_mul(a, b, r)) {
     return none;
   }
   return r;

@@ -112,6 +112,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: No standard library in the core
         run: cmake -DROOT=$PWD -P cmake/check_includes.cmake
+      - name: Layer boundaries
+        run: cmake -DROOT=$PWD -P cmake/check_layer_boundaries.cmake
+      - name: Standalone public headers
+        run: cmake -DROOT=$PWD -DCXX=${CXX:-c++} -P cmake/check_public_headers.cmake
 
   install:
     runs-on: ubuntu-latest
