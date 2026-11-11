@@ -29,6 +29,12 @@ struct Block {
 //   * create<T>() / destroy() are typed helpers;
 //   * resources compose: most take an `upstream` they get their memory from.
 //
+// Ownership rules:
+//   * a successful allocation is owned by the caller until deallocate();
+//   * failed construction in create<T>() releases the allocation before the
+//     exception escapes;
+//   * container moves and copies retain their resource and never own it.
+//
 // Deallocation contract: deallocate(p, n, align) accepts any n between the size
 // that was requested and the size that allocate_at_least() reported.
 //

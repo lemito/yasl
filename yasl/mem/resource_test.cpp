@@ -8,6 +8,16 @@
 using namespace yasl;
 using namespace yasl::mem;
 
+namespace {
+struct alignas(256) OverAligned {
+  uint64 value = 0;
+};
+
+struct Throwing {
+  explicit Throwing(int) { throw FormatError("constructor failure"); }
+};
+}  // namespace
+
 YASL_TEST(resource_interface_allocate_deallocate) {
   Resource* r = system_resource();
   void* p = r->allocate(100, 16);
@@ -59,6 +69,20 @@ YASL_TEST(resource_create_and_destroy) {
   CHECK_EQ(up.stats().live(), size_t(1));
   arena.release();
   CHECK_EQ(up.stats().live(), size_t(0));
+}
+
+YASL_TEST(resource_create_exception_releases_allocation) {
+  Tracking tracking;
+  CHECK_THROWS(tracking.create<Throwing>(1), FormatError);
+  CHECK_EQ(tracking.stats().live(), size_t(0));
+}
+
+YASL_TEST(resource_create_honors_overalignment) {
+  Tracking tracking;
+  OverAligned* p = tracking.create<OverAligned>();
+  CHECK(reinterpret_cast<uintptr_t>(p) % alignof(OverAligned) == 0);
+  tracking.destroy(p);
+  CHECK_EQ(tracking.stats().live(), size_t(0));
 }
 
 YASL_TEST(resource_system_alignment) {
