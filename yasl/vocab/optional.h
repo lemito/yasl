@@ -36,14 +36,15 @@ class Optional {
     has_ = true;
   }
 
-  Optional(const Optional& other) {
+  Optional(const Optional& other) requires CopyConstructible<T> {
     if (other.has_) {
       yasl::construct_at(yasl::addressof(value_), other.value_);
       has_ = true;
     }
   }
 
-  Optional(Optional&& other) noexcept(NothrowMoveConstructible<T>) {
+  Optional(Optional&& other) noexcept(NothrowMoveConstructible<T>)
+    requires MoveConstructible<T> {
     if (other.has_) {
       yasl::construct_at(yasl::addressof(value_), yasl::move(other.value_));
       has_ = true;
@@ -57,7 +58,8 @@ class Optional {
     return *this;
   }
 
-  Optional& operator=(const Optional& other) {
+  Optional& operator=(const Optional& other)
+    requires(CopyConstructible<T> && AssignableFrom<T&, const T&>) {
     if (this != &other) {
       if (other.has_) {
         assign(other.value_);
@@ -68,7 +70,9 @@ class Optional {
     return *this;
   }
 
-  Optional& operator=(Optional&& other) noexcept(NothrowMoveConstructible<T>) {
+  Optional& operator=(Optional&& other) noexcept(NothrowMoveConstructible<T> &&
+                                                  NothrowMoveAssignable<T>)
+    requires(MoveConstructible<T> && AssignableFrom<T&, T&&>) {
     if (this != &other) {
       if (other.has_) {
         assign(yasl::move(other.value_));

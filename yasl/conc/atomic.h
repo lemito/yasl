@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yasl/core/noncopy.h>
+#include <yasl/core/check.h>
 #include <yasl/core/traits.h>
 
 #include <atomic>
@@ -39,46 +40,51 @@ class Atomic : NoneCopyable {
     return a_.exchange(v, order(o));
   }
 
-  // On failure `expected` receives the current value.
-  bool compare_exchange(T& expected, T desired, Order success = Order::SeqCst,
-                        Order failure = Order::SeqCst) noexcept {
-    return a_.compare_exchange_strong(expected, desired, order(success),
-                                      order(failure));
+  // The one-order overload derives a valid failure order.
+  bool compare_exchange(T& expected, T desired, Order success = Order::SeqCst) noexcept {
+    return compare_exchange(expected, desired, success, failure_order(success));
   }
 
-  bool compare_exchange_weak(T& expected, T desired,
-                             Order success = Order::SeqCst,
-                             Order failure = Order::SeqCst) noexcept {
-    return a_.compare_exchange_weak(expected, desired, order(success),
-                                    order(failure));
+  bool compare_exchange(T& expected, T desired, Order success, Order failure) noexcept {
+    YASL_VERIFY(valid_failure(success, failure));
+    return a_.compare_exchange_strong(expected, desired, order(success), order(failure));
   }
 
-  T fetch_add(T v, Order o = Order::SeqCst) noexcept
-    requires(Integral<T> || Pointer<T>)
+  bool compare_exchange_weak(T& expected, T desired, Order success = Order::SeqCst) noexcept {
+    return compare_exchange_weak(expected, desired, success, failure_order(success));
+  }
+
+  bool compare_exchange_weak(T& expected, T desired, Order success, Order failure) noexcept {
+    YASL_VERIFY(valid_failure(success, failure));
+    return a_.compare_exchange_weak(expected, desired, order(success), order(failure));
+  }
+
+  T fetch_add(Conditional<Pointer<T>, ptrdiff_t, T> v, Order o = Order::SeqCst) noexcept
+    requires((Integral<T> && !SameAs<T, bool>) || Pointer<T>)
   {
     return a_.fetch_add(v, order(o));
   }
 
-  T fetch_sub(T v, Order o = Order::SeqCst) noexcept
-    requires(Integral<T> || Pointer<T>)
+  T fetch_sub(Conditional<Pointer<T>, ptrdiff_t, T> v, Order o = Order::SeqCst) noexcept
+    requires((Integral<T> && !SameAs<T, bool>) || Pointer<T>)
   {
     return a_.fetch_sub(v, order(o));
   }
 
   T fetch_and(T v, Order o = Order::SeqCst) noexcept
-    requires(Integral<T>)
+    requires(Integral<T> && !SameAs<T, bool>)
   {
     return a_.fetch_and(v, order(o));
   }
 
   T fetch_or(T v, Order o = Order::SeqCst) noexcept
-    requires(Integral<T>)
+    requires(Integral<T> && !SameAs<T, bool>)
   {
     return a_.fetch_or(v, order(o));
   }
 
   T fetch_xor(T v, Order o = Order::SeqCst) noexcept
-    requires(Integral<T>)
+    requires(Integral<T> && !SameAs<T, bool>)
   {
     return a_.fetch_xor(v, order(o));
   }
@@ -86,7 +92,7 @@ class Atomic : NoneCopyable {
   // Retries f(current) -> new until the swap succeeds; returns the previous
   // value.
   template <class F>
-  T update(F f, Order o = Order::SeqCst) noexcept {
+  T update(F f, Order o = Order::SeqCst) noexcept(noexcept(f(declval<T>()))) {
     T cur = load(Order::Relaxed);
     while (!compare_exchange_weak(cur, f(cur), o, Order::Relaxed)) {
     }
@@ -94,6 +100,18 @@ class Atomic : NoneCopyable {
   }
 
  private:
+  static constexpr Order failure_order(Order o) noexcept {
+    return o == Order::Release ? Order::Relaxed :
+           o == Order::AcqRel ? Order::Acquire : o;
+  }
+
+  static constexpr bool valid_failure(Order success, Order failure) noexcept {
+    if (failure == Order::Relaxed) return true;
+    if (failure == Order::Acquire)
+      return success == Order::Acquire || success == Order::AcqRel || success == Order::SeqCst;
+    return failure == Order::SeqCst && success == Order::SeqCst;
+  }
+
   static constexpr std::memory_order order(Order o) noexcept {
     return static_cast<std::memory_order>(int(o));
   }

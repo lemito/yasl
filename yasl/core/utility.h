@@ -33,7 +33,8 @@ constexpr T exchange(T& obj, U&& value) {
 }
 
 template <class T>
-constexpr void swap(T& a, T& b) noexcept(NothrowMoveConstructible<T>) {
+constexpr void swap(T& a, T& b) noexcept(NothrowMoveConstructible<T> &&
+                                       NothrowMoveAssignable<T>) {
   T tmp = yasl::move(a);
   a = yasl::move(b);
   b = yasl::move(tmp);
@@ -56,17 +57,17 @@ constexpr To bit_cast(const From& v) noexcept {
 }
 
 template <class T>
-constexpr const T& min(const T& a, const T& b) noexcept {
+constexpr const T& min(const T& a, const T& b) noexcept(noexcept(b < a)) {
   return b < a ? b : a;
 }
 
 template <class T>
-constexpr const T& max(const T& a, const T& b) noexcept {
+constexpr const T& max(const T& a, const T& b) noexcept(noexcept(a < b)) {
   return a < b ? b : a;
 }
 
 template <class T>
-constexpr const T& clamp(const T& v, const T& lo, const T& hi) noexcept {
+constexpr const T& clamp(const T& v, const T& lo, const T& hi) noexcept(noexcept(v < lo) && noexcept(hi < v)) {
   return v < lo ? lo : (hi < v ? hi : v);
 }
 

@@ -22,7 +22,7 @@ class BitSet {
   // Starts with n zero bits.
   explicit BitSet(size_t n, mem::Resource* res = mem::default_resource())
       : words_(res), size_(n) {
-    words_.resize((n + 63) / 64);
+    words_.resize(n / 64 + size_t(n % 64 != 0));
   }
 
   size_t size() const noexcept { return size_; }
@@ -37,6 +37,7 @@ class BitSet {
       if (!value) {
         return;
       }
+      if (i == npos) throw LengthError("yasl::BitSet: too large");
       resize(i + 1);
     }
     uint64 mask = uint64(1) << (i % 64);
@@ -53,12 +54,12 @@ class BitSet {
 
   void resize(size_t n) {
     if (n < size_) {
-      words_.resize((n + 63) / 64);
+      words_.resize(n / 64 + size_t(n % 64 != 0));
       if (n % 64 != 0) {
         words_.back() &= (uint64(1) << (n % 64)) - 1;
       }
     } else {
-      words_.resize((n + 63) / 64);
+      words_.resize(n / 64 + size_t(n % 64 != 0));
     }
     size_ = n;
   }

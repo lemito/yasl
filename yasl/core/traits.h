@@ -199,6 +199,12 @@ concept DefaultConstructible = ConstructibleFrom<T>;
 template <class T>
 concept NothrowMoveConstructible = __is_nothrow_constructible(T, T&&);
 
+template <class T, class U>
+concept AssignableFrom = __is_assignable(T, U);
+
+template <class T>
+concept NothrowMoveAssignable = __is_nothrow_assignable(T&, T&&);
+
 template <class T>
 concept HasVirtualDestructor = __has_virtual_destructor(T);
 
