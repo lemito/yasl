@@ -154,3 +154,27 @@ YASL_TEST(algo_partition_and_predicates) {
   CHECK(yasl::find_if(v.begin(), v.end(), [](int x) { return x > 1000; }) ==
         v.end());
 }
+
+YASL_TEST(algo_basic_sequences) {
+  int src[] = {1, 2, 3, 4, 5};
+  int dst[5] = {};
+  CHECK(yasl::copy(src, src + 5, dst) == dst + 5);
+  CHECK(yasl::equal(dst, dst + 5, src));
+  yasl::fill(dst + 1, dst + 4, 9);
+  CHECK(dst[0] == 1 && dst[1] == 9 && dst[3] == 9 && dst[4] == 5);
+  CHECK(yasl::find(dst, dst + 5, 9) == dst + 1);
+  CHECK(yasl::find(dst, dst + 5, 42) == dst + 5);
+  CHECK_EQ(yasl::count(dst, dst + 5, 9), size_t(3));
+  int overlap[] = {1, 2, 3, 4, 5};
+  yasl::copy_backward(overlap, overlap + 4, overlap + 5);
+  CHECK(overlap[0] == 1 && overlap[1] == 1 && overlap[4] == 4);
+  yasl::transform(src, src + 5, dst, [](int x) { return x * 2; });
+  CHECK(dst[0] == 2 && dst[4] == 10);
+
+  unsigned char bytes[64] = {};
+  bytes[37] = 7;
+  CHECK(yasl::find(bytes, bytes + 64, 7) == bytes + 37);
+  CHECK_EQ(yasl::count(bytes, bytes + 64, 0), size_t(63));
+  unsigned char same[64] = {};
+  CHECK(yasl::equal(bytes, bytes + 64, same) == false);
+}
