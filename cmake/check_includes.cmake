@@ -10,7 +10,7 @@ set(ALLOWED
     cstddef cstdint stddef.h stdint.h new initializer_list compare atomic
     sys/types.h sys/stat.h sys/mman.h sys/random.h time.h sched.h dirent.h stdio.h unistd.h fcntl.h errno.h string.h stdlib.h pthread.h execinfo.h
     malloc.h malloc/malloc.h windows.h
-    emmintrin.h intrin.h crt_externs.h linux/futex.h sys/syscall.h)
+    emmintrin.h arm_neon.h intrin.h crt_externs.h linux/futex.h sys/syscall.h)
 
 file(GLOB_RECURSE FILES "${ROOT}/yasl/*.h" "${ROOT}/yasl/*.cpp")
 set(BAD 0)

@@ -184,6 +184,7 @@ if get_option('tests')
   'yasl/mem/pool_test.cpp',
   'yasl/mem/resource_test.cpp',
   'yasl/mem/sync_test.cpp',
+  'yasl/mem/sys_test.cpp',
   'yasl/mem/tracking_test.cpp',
   'yasl/mem/thread_local_pool_test.cpp',
   'yasl/os/env_test.cpp',

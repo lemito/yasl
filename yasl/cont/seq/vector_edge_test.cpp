@@ -12,7 +12,11 @@ YASL_TEST(vector_edge_empty_operations) {
     ++count;
   }
   CHECK_EQ(count, size_t(0));
+#if !defined(NDEBUG) || defined(YASL_FORCE_ASSERTS)
   CHECK_PANICS(v.pop());
+#else
+  CHECK(v.empty());
+#endif
   CHECK(!v.first().has_value());
   CHECK(!v.last().has_value());
   v.shrink_to_fit();

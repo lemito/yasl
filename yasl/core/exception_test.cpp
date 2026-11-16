@@ -49,5 +49,5 @@ YASL_TEST(exception_inherits_std_exception) {
   Exception e("x");
   CHECK_EQ(e.what(), "x");
   // what() is noexcept.
-  noexcept(e.what());
+  static_assert(noexcept(e.what()));
 }
