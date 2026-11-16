@@ -251,6 +251,9 @@ class StringView {
     if (s.n_ > n_) {
       return npos;
     }
+    if (pos > n_ - s.n_) {
+      return npos;
+    }
     if (!is_constant_evaluated()) {
       const char* last = p_ + (n_ - s.n_);
       for (const char* q = p_ + pos; q <= last; ++q) {

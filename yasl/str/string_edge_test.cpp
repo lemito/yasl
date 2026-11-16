@@ -207,6 +207,9 @@ YASL_TEST(view_edge_find_at_boundaries) {
   CHECK_EQ(v.find('a'), size_t(0));
   CHECK_EQ(v.rfind('c'), size_t(5));
   CHECK_EQ(v.find("abc"), size_t(0));
+  CHECK_EQ(v.find("b", StringView::npos), StringView::npos);
+  CHECK_EQ(v.find("b", v.size() + 1), StringView::npos);
+  CHECK_EQ(v.find("bc", v.size() - 1), StringView::npos);
   CHECK_EQ(v.rfind("abc"), size_t(3));
   CHECK_EQ(v.find('a', 1), size_t(3));
   CHECK_EQ(v.rfind('a', 2), size_t(0));
