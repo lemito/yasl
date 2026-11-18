@@ -57,7 +57,14 @@ class RandomOps {
   template <Integral T>
   T range(T lo, T hi) noexcept {
     YASL_ASSERT(lo < hi);
-    return T(int64(lo) + int64(below(uint64(hi) - uint64(lo))));
+    using U = MakeUnsigned<T>;
+    const U span = U(U(hi) - U(lo));
+    const U value = U(lo) + U(below(uint64(span)));
+    if constexpr (SignedIntegral<T>) {
+      return bit_cast<T>(value);
+    } else {
+      return value;
+    }
   }
 
   // Fisher-Yates.

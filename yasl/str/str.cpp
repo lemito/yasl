@@ -123,7 +123,10 @@ String& String::replace(size_t pos, size_t n, StringView s) {
   }
   char* gap = splice(pos, n, s.size());
   if (!s.empty()) {
-    yasl::mem_copy(gap, s.data(), s.size());
+    YASL_VERIFY(s.size() <= size() - (gap - data()));
+    for (size_t i = 0; i < s.size(); ++i) {
+      gap[i] = s[i];
+    }
   }
   return *this;
 }

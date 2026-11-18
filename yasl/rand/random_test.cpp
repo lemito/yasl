@@ -39,6 +39,16 @@ YASL_TEST(random_range_is_uniform_and_bounded) {
   CHECK(rng.range(uint64(0), ~uint64(0)) <= ~uint64(0));
 }
 
+YASL_TEST(random_range_unsigned_and_signed_extremes) {
+  Random rng(7);
+  for (int i = 0; i < 1000; ++i) {
+    uint64 u = rng.range(uint64(0), uint64(-1));
+    CHECK(u < uint64(-1));
+    int64 s = rng.range(min_value<int64>(), max_value<int64>());
+    CHECK(s >= min_value<int64>() && s < max_value<int64>());
+  }
+}
+
 YASL_TEST(random_double_and_shuffle) {
   Random rng(1);
   double sum = 0;

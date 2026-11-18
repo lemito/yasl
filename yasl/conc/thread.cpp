@@ -6,6 +6,11 @@
 #include <unistd.h>
 
 namespace yasl {
+struct Thread::ThreadState {
+  pthread_t id{};
+  mem::Resource* resource = nullptr;
+};
+
 namespace {
 struct Start {
   Function<void()> fn;
@@ -22,26 +27,39 @@ void* trampoline(void* arg) {
 }  // namespace
 
 Thread::Thread(Function<void()>&& f, mem::Resource* res) {
-  Start* s = res->create<Start>(Start{yasl::move(f), res});
+  ThreadState* state = res->create<ThreadState>(ThreadState{ {}, res });
+  Start* s = nullptr;
+  try {
+    s = res->create<Start>(Start{yasl::move(f), res});
+  } catch (...) {
+    res->destroy(state);
+    throw;
+  }
   pthread_t t;
   if (pthread_create(&t, nullptr, &trampoline, s) != 0) {
+    res->destroy(state);
     res->destroy(s);
     throw Exception("yasl::Thread: cannot start a thread");
   }
-  id_ = uint64(t);
+  state->id = t;
+  state_ = state;
   joinable_ = true;
 }
 
 void Thread::join() noexcept {
   if (joinable_) {
-    pthread_join(pthread_t(id_), nullptr);
+    pthread_join(state_->id, nullptr);
+    state_->resource->destroy(state_);
+    state_ = nullptr;
     joinable_ = false;
   }
 }
 
 void Thread::detach() noexcept {
   if (joinable_) {
-    pthread_detach(pthread_t(id_));
+    pthread_detach(state_->id);
+    state_->resource->destroy(state_);
+    state_ = nullptr;
     joinable_ = false;
   }
 }

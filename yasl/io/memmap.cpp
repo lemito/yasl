@@ -49,6 +49,10 @@ MemMap MemMap::map(int fd, MemMapMode mode, uint64 offset, uint64 length) {
     throw Error("sysconf page size", "fd", EINVAL);
   }
   const uint64 head = offset % uint64(page_size);
+  const uint64 map_offset = offset - head;
+  if (map_offset > uint64(max_value<off_t>())) {
+    throw LengthError("mmap: offset is not representable as off_t");
+  }
   if (length > uint64(size_t(-1)) - head) {
     throw LengthError("mmap: range too large for address space");
   }
@@ -57,7 +61,7 @@ MemMap MemMap::map(int fd, MemMapMode mode, uint64 offset, uint64 length) {
   void* base =
       ::mmap(nullptr, mapped_size, prot,
              mode == MemMapMode::CopyOnWrite ? MAP_PRIVATE : MAP_SHARED, fd,
-             off_t(offset - head));
+             off_t(map_offset));
   if (base == MAP_FAILED) {
     throw Error("mmap", "fd", errno);
   }

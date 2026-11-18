@@ -15,7 +15,10 @@ namespace yasl {
 //     slots.release();
 class Semaphore {
  public:
-  explicit Semaphore(size_t initial = 0) noexcept : state_(uint32(initial)) {}
+  explicit Semaphore(size_t initial = 0) noexcept : state_(0) {
+    YASL_VERIFY(initial <= kCount);
+    state_.store(uint32(initial), std::memory_order_relaxed);
+  }
 
   Semaphore(const Semaphore&) = delete;
   Semaphore& operator=(const Semaphore&) = delete;
@@ -71,6 +74,7 @@ class Semaphore {
 
   // Adds n permits.
   void release(size_t n = 1) noexcept {
+    YASL_VERIFY(n <= kCount);
     if (state_.fetch_add(uint32(n), std::memory_order_release) & kWaiters) {
       state_.fetch_and(kCount, std::memory_order_relaxed);
       if (n == 1) {
@@ -119,7 +123,10 @@ class Semaphore {
 //     bool leader = b.wait();      // exactly one caller per round gets true
 class Barrier {
  public:
-  explicit Barrier(size_t parties) noexcept : parties_(uint32(parties)) {}
+  explicit Barrier(size_t parties) noexcept : parties_(0) {
+    YASL_VERIFY(parties > 0 && parties <= uint32(-1));
+    parties_ = uint32(parties);
+  }
 
   Barrier(const Barrier&) = delete;
   Barrier& operator=(const Barrier&) = delete;

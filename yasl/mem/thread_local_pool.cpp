@@ -173,10 +173,10 @@ struct Heap {
     if (!s->listed) {
       list(s);
     }
-    // Keep one empty slab per class as a cache.
-    if (s->live == 0 && (s->next || s->prev)) {
-      release(s);
-    }
+    // Slabs are reclaimed by the shared heap while holding its lock.  A
+    // remote free acquires that lock before inspecting the slab, so releasing
+    // here would leave a use-after-free window between owner inspection and
+    // publication to `remote`.
   }
 
   // Takes a slab over from a dead thread's heap.
@@ -283,8 +283,13 @@ Block ThreadLocalPool::alloc(size_t size, size_t align) noexcept {
 void ThreadLocalPool::free(void* p, size_t, size_t) noexcept {
   Slab* s = slab_of(p);
   Heap* me = t_heap;
+  // The shared lock protects the slab lifetime.  In particular, a retiring
+  // owner cannot transfer and release a slab while a remote free is finding
+  // its owner and linking the block into the remote list.
+  g_shared.acquire();
   if (me && s->owner.load(std::memory_order_acquire) == me) {
     me->free(s, p);
+    g_shared.unlock();
     return;
   }
   // Someone else's slab: leave the block for its owner.
@@ -293,6 +298,7 @@ void ThreadLocalPool::free(void* p, size_t, size_t) noexcept {
   while (!s->remote.compare_exchange_weak(n->next, n, std::memory_order_release,
                                           std::memory_order_relaxed)) {
   }
+  g_shared.unlock();
 }
 
 Block ThreadLocalPool::resize(void* p, size_t, size_t want,

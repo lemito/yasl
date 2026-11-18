@@ -26,12 +26,13 @@ class Thread : MoveOnly {
   Thread& operator=(const Thread&) = delete;
 
   Thread(Thread&& other) noexcept
-      : id_(other.id_), joinable_(yasl::exchange(other.joinable_, false)) {}
+      : state_(yasl::exchange(other.state_, nullptr)),
+        joinable_(yasl::exchange(other.joinable_, false)) {}
 
   Thread& operator=(Thread&& other) noexcept {
     if (this != &other) {
       join();
-      id_ = other.id_;
+      state_ = yasl::exchange(other.state_, nullptr);
       joinable_ = yasl::exchange(other.joinable_, false);
     }
     return *this;
@@ -53,7 +54,8 @@ class Thread : MoveOnly {
  private:
   Thread(Function<void()>&& f, mem::Resource* res);
 
-  uint64 id_ = 0;  // the pthread_t, stored as an integer
+  struct ThreadState;
+  ThreadState* state_ = nullptr;
   bool joinable_ = false;
 };
 

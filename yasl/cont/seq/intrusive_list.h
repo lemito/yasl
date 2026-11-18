@@ -300,6 +300,11 @@ class IntrusiveList : MoveOnly {
     if constexpr (Member == nullptr) {
       return static_cast<Node*>(x);
     } else {
+      // Compute the offset from a live object.  Forming `fake->*Member` on a
+      // byte buffer is undefined for non-standard-layout and non-trivial T.
+      member_offset_ref() = static_cast<size_t>(
+          reinterpret_cast<char*>(&(x->*Member)) -
+          reinterpret_cast<char*>(x));
       return &(x->*Member);
     }
   }
@@ -312,14 +317,14 @@ class IntrusiveList : MoveOnly {
     if constexpr (Member == nullptr) {
       return static_cast<T*>(n);
     } else {
-      return reinterpret_cast<T*>(reinterpret_cast<char*>(n) - member_offset());
+      return reinterpret_cast<T*>(reinterpret_cast<char*>(n) -
+                                  member_offset_ref());
     }
   }
 
-  static size_t member_offset() noexcept {
-    alignas(T) static char storage[sizeof(T)];
-    T* fake = reinterpret_cast<T*>(storage);
-    return size_t(reinterpret_cast<char*>(&(fake->*Member)) - storage);
+  static size_t& member_offset_ref() noexcept {
+    static size_t offset = 0;
+    return offset;
   }
 
   void init() noexcept { head_.prev_ = head_.next_ = &head_; }

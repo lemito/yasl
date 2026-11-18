@@ -70,7 +70,11 @@ class Duration {
   }
 
   static constexpr Duration from_secs_f64(double s) noexcept {
-    return Duration(int64(s * 1e9));
+    const long double ns = static_cast<long double>(s) * 1'000'000'000.0L;
+    constexpr long double kMin = -9223372036854775808.0L;
+    constexpr long double kLimit = 9223372036854775808.0L;
+    YASL_VERIFY(s == s && ns >= kMin && ns < kLimit);
+    return Duration(static_cast<int64>(ns));
   }
 
   static constexpr Duration max() noexcept {

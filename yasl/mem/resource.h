@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yasl/core/noncopy.h>
+#include <yasl/core/check.h>
 #include <yasl/core/exception.h>
 #include <yasl/core/types.h>
 #include <yasl/core/utility.h>
@@ -101,6 +102,7 @@ class Resource {
 
   template <class T>
   void deallocate_array(T* p, size_t n) noexcept {
+    YASL_VERIFY(n <= max_value<size_t>() / sizeof(T));
     deallocate(p, n * sizeof(T), alignof(T));
   }
 
